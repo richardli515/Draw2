@@ -28,8 +28,8 @@
     </div>
     <div class="hint">
       计分规则：每次出的牌进入自己的出牌堆。起牌牌堆空后，不再补牌。先出完手牌的一方，把对方剩余手牌也收入自己的出牌堆。最后比较出牌堆数量，多者获胜。
-      <br>牌型：单张、对子、两张顺子。顺子只允许 <code>34</code> 到 <code>KA</code>，大小王不进顺子。
-      <br>大小：<code>3 &lt; 4 &lt; ... &lt; A &lt; 2 &lt; 小王 &lt; 大王</code>。小王+大王可作为最大对子。
+      <br>牌型：单张、对子、两张顺子。顺子只允许 <code>34</code> 到 <code>KA</code>，双王为王炸，可压任意牌型。大小王不进顺子。
+      <br>大小：<code>3 &lt; 4 &lt; ... &lt; A &lt; 2 &lt; 小王 &lt; 大王</code>。小王+大王为王炸，视为任意牌型最大值。
     </div>
   </div>
   <div class="panel"><h2>桌面</h2><div class="row" id="tableCards"></div><div class="small" id="tableInfo"></div></div>
@@ -57,21 +57,29 @@ function createDeck(){
 function shuffle(d){for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]]}return d}
 function rv(r){return RANKS.indexOf(r)}
 function sv(cards){if(cards.length!==2)return-1;const v=cards.map(c=>STRAIGHT_RANKS.indexOf(c.rank));if(v.includes(-1))return-1;v.sort((a,b)=>a-b);return v[1]-v[0]===1?v[1]:-1}
-function isJokerPair(cards){return cards.length===2&&cards.some(c=>c.rank==='小王')&&cards.some(c=>c.rank==='大王')}
+function isKingBomb(cards){return cards.length===2&&cards.some(c=>c.rank==='小王')&&cards.some(c=>c.rank==='大王')}
 function type(cards){
+  if(isKingBomb(cards))return'kingbomb';
   if(cards.length===1)return'single';
   if(cards.length===2&&cards[0].rank===cards[1].rank)return'pair';
-  if(isJokerPair(cards))return'pair';
   if(sv(cards)!==-1)return'straight';
   return null
 }
 function value(cards){
+  if(isKingBomb(cards))return 999;
   if(type(cards)==='straight')return sv(cards);
-  if(isJokerPair(cards))return 100;
   return rv(cards[0].rank)
 }
-function canBeat(last,cards){const t=type(cards);if(!t)return false;if(!last)return true;if(t!==type(last.cards))return false;return value(cards)>value(last.cards)}
-function label(t){return t==='single'?'单张':t==='pair'?'对子':t==='straight'?'顺子':'非法牌型'}
+function canBeat(last,cards){
+  const t=type(cards);
+  if(!t)return false;
+  if(!last)return true;
+  if(isKingBomb(cards))return true;
+  if(isKingBomb(last.cards))return false;
+  if(t!==type(last.cards))return false;
+  return value(cards)>value(last.cards)
+}
+function label(t){return t==='single'?'单张':t==='pair'?'对子':t==='straight'?'顺子':t==='kingbomb'?'王炸':'非法牌型'}
 function txt(c){return c.rank+(c.suit||'')}
 function jokerSrc(c){
   if(c.rank==='小王') return './joker-small.svg';
