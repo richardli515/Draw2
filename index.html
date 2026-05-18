@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Draw2 Score</title>
+  <title>Draw2 Score Jokers</title>
   <style>
     body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f172a;color:#e5e7eb;margin:0;padding:14px}
     .game{max-width:760px;margin:0 auto}.panel{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin-bottom:12px}
@@ -18,7 +18,7 @@
 </head>
 <body>
 <div class="game">
-  <h1>Draw2 · 起两张计分版</h1>
+  <h1>Draw2 · 起两张计分版（含大小王）</h1>
   <div class="panel">
     <div class="status" id="status">加载中...</div>
     <div class="score">
@@ -27,7 +27,9 @@
       <div class="scorebox">起牌牌堆：<b id="deckInfo">0</b></div>
     </div>
     <div class="hint">
-      计分规则：每次出的牌进入自己的出牌堆。起牌牌堆空后，不再补牌。先出完手牌的一方，把对方剩余手牌也收入自己的出牌堆。最后比较出牌堆数量，多者获胜。顺子只允许 <code>34</code> 到 <code>KA</code>。
+      计分规则：每次出的牌进入自己的出牌堆。起牌牌堆空后，不再补牌。先出完手牌的一方，把对方剩余手牌也收入自己的出牌堆。最后比较出牌堆数量，多者获胜。
+      <br>牌型：单张、对子、两张顺子。顺子只允许 <code>34</code> 到 <code>KA</code>，大小王不进顺子。
+      <br>大小：<code>3 &lt; 4 &lt; ... &lt; A &lt; 2 &lt; 小王 &lt; 大王</code>。小王+大王可作为最大对子。
     </div>
   </div>
   <div class="panel"><h2>桌面</h2><div class="row" id="tableCards"></div><div class="small" id="tableInfo"></div></div>
@@ -40,25 +42,44 @@
 </div>
 <script>
 (function(){
-const RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
-const SR=['3','4','5','6','7','8','9','10','J','Q','K','A'];
+const RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A','2','小王','大王'];
+const STRAIGHT_RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A'];
+const NORMAL_RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
 const SUITS=['♠','♥','♣','♦']; const HUMAN=0,AI=1; let state;
-function createDeck(){const d=[];for(const r of RANKS)for(const s of SUITS)d.push({rank:r,suit:s,id:r+s+Math.random()});return shuffle(d)}
+
+function createDeck(){
+  const d=[];
+  for(const r of NORMAL_RANKS)for(const s of SUITS)d.push({rank:r,suit:s,id:r+s+Math.random()});
+  d.push({rank:'小王',suit:'',id:'小王'+Math.random()});
+  d.push({rank:'大王',suit:'',id:'大王'+Math.random()});
+  return shuffle(d)
+}
 function shuffle(d){for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]]}return d}
 function rv(r){return RANKS.indexOf(r)}
-function sv(cards){if(cards.length!==2)return-1;const v=cards.map(c=>SR.indexOf(c.rank));if(v.includes(-1))return-1;v.sort((a,b)=>a-b);return v[1]-v[0]===1?v[1]:-1}
-function type(cards){if(cards.length===1)return'single';if(cards.length===2&&cards[0].rank===cards[1].rank)return'pair';if(sv(cards)!==-1)return'straight';return null}
-function value(cards){return type(cards)==='straight'?sv(cards):rv(cards[0].rank)}
+function sv(cards){if(cards.length!==2)return-1;const v=cards.map(c=>STRAIGHT_RANKS.indexOf(c.rank));if(v.includes(-1))return-1;v.sort((a,b)=>a-b);return v[1]-v[0]===1?v[1]:-1}
+function isJokerPair(cards){return cards.length===2&&cards.some(c=>c.rank==='小王')&&cards.some(c=>c.rank==='大王')}
+function type(cards){
+  if(cards.length===1)return'single';
+  if(cards.length===2&&cards[0].rank===cards[1].rank)return'pair';
+  if(isJokerPair(cards))return'pair';
+  if(sv(cards)!==-1)return'straight';
+  return null
+}
+function value(cards){
+  if(type(cards)==='straight')return sv(cards);
+  if(isJokerPair(cards))return 100;
+  return rv(cards[0].rank)
+}
 function canBeat(last,cards){const t=type(cards);if(!t)return false;if(!last)return true;if(t!==type(last.cards))return false;return value(cards)>value(last.cards)}
 function label(t){return t==='single'?'单张':t==='pair'?'对子':t==='straight'?'顺子':'非法牌型'}
-function txt(c){return c.rank+c.suit} function red(c){return c.suit==='♥'||c.suit==='♦'}
+function txt(c){return c.rank+(c.suit||'')} function red(c){return c.suit==='♥'||c.suit==='♦'}
 function drawToTwo(p){while(p.hand.length<2&&state.deck.length>0)p.hand.push(state.deck.shift())}
 function init(){state={deck:createDeck(),players:[{name:'你',hand:[],selectedIds:[],pile:[]},{name:'电脑',hand:[],selectedIds:[],pile:[]}],currentPlayer:HUMAN,lastPlay:null,lastWinner:null,message:'你先手。',gameOver:false};drawToTwo(state.players[0]);drawToTwo(state.players[1]);render()}
 function selected(){const p=state.players[HUMAN];return p.hand.filter(c=>p.selectedIds.includes(c.id))}
 function toggle(id){if(state.gameOver||state.currentPlayer!==HUMAN)return;const p=state.players[HUMAN];if(p.selectedIds.includes(id))p.selectedIds=p.selectedIds.filter(x=>x!==id);else{if(p.selectedIds.length>=2)return;p.selectedIds.push(id)}render()}
 function execute(i,cards){const p=state.players[i];p.hand=p.hand.filter(c=>!cards.some(x=>x.id===c.id));p.selectedIds=[];p.pile.push(...cards);state.lastPlay={playerIndex:i,cards};state.lastWinner=i;drawToTwo(p);checkEnd(i);if(!state.gameOver){state.currentPlayer=1-i;state.message=p.name+' 出了 '+cards.map(txt).join(' ')+'（'+label(type(cards))+'）。'}}
 function checkEnd(i){if(state.deck.length!==0)return;if(state.players[i].hand.length!==0)return;const other=1-i;const winner=state.players[i];const loser=state.players[other];if(loser.hand.length>0){winner.pile.push(...loser.hand);loser.hand=[]}state.gameOver=true;const hs=state.players[HUMAN].pile.length,as=state.players[AI].pile.length;if(hs>as)state.message='游戏结束：你获胜！你的出牌堆 '+hs+' 张，电脑 '+as+' 张。';else if(as>hs)state.message='游戏结束：电脑获胜。电脑出牌堆 '+as+' 张，你 '+hs+' 张。';else state.message='游戏结束：平局，双方都是 '+hs+' 张。'}
-function playHuman(){if(state.gameOver||state.currentPlayer!==HUMAN)return;const cards=selected();if(cards.length===0){state.message='请先点选要出的牌。';render();return}if(!type(cards)){state.message='非法牌型。只能出单张、对子、或 34 到 KA 的两张顺子。';render();return}if(!canBeat(state.lastPlay,cards)){state.message='压不上。请出同类型更大的牌，或者 Pass。';render();return}execute(HUMAN,cards);render();aiLater()}
+function playHuman(){if(state.gameOver||state.currentPlayer!==HUMAN)return;const cards=selected();if(cards.length===0){state.message='请先点选要出的牌。';render();return}if(!type(cards)){state.message='非法牌型。只能出单张、对子、或 34 到 KA 的两张顺子。大小王不能进顺子。';render();return}if(!canBeat(state.lastPlay,cards)){state.message='压不上。请出同类型更大的牌，或者 Pass。';render();return}execute(HUMAN,cards);render();aiLater()}
 function clearAfterPass(passer){const w=state.lastWinner;state.players[passer].selectedIds=[];state.lastPlay=null;state.currentPlayer=w;state.message=state.players[passer].name+' Pass。清桌，'+state.players[w].name+'继续先手。'}
 function passHuman(){if(state.gameOver||state.currentPlayer!==HUMAN)return;if(!state.lastPlay){state.message='空桌不能 Pass，必须出牌。';render();return}clearAfterPass(HUMAN);render();aiLater()}
 function allPlays(hand){const ps=hand.map(c=>[c]);if(hand.length>=2)ps.push([hand[0],hand[1]]);return ps.filter(p=>type(p))}
