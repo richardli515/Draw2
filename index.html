@@ -7,18 +7,18 @@
   <style>
     body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f172a;color:#e5e7eb;margin:0;padding:14px}
     .game{max-width:760px;margin:0 auto}.panel{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin-bottom:12px}
-    h1{font-size:24px;margin:8px 0 12px}h2{font-size:20px;margin:0 0 12px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;min-height:72px}
+    h1{font-size:28px;margin:8px 0 2px;font-weight:900}.subtitle{font-size:11px;opacity:.38;letter-spacing:.8px;margin-bottom:12px}h2{font-size:20px;margin:0 0 12px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;min-height:72px}
     .card{width:58px;height:80px;border-radius:10px;background:#f8fafc;color:#111827;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;cursor:pointer;user-select:none;border:3px solid transparent;box-shadow:0 5px 10px rgba(0,0,0,.28)}
     .card.red{color:#dc2626}.card.selected{border-color:#38bdf8;transform:translateY(-5px)}.card.back{background:#1d4ed8;color:#bfdbfe;cursor:default}.table-card{width:50px;height:70px;font-size:18px;cursor:default}
     button{background:#2563eb;color:white;border:0;border-radius:10px;padding:11px 15px;font-size:16px;font-weight:800;cursor:pointer}
     button.secondary{background:#475569}button.danger{background:#dc2626}button:disabled{background:#334155;color:#94a3b8}
     .status{font-size:17px;font-weight:800;color:#facc15;line-height:1.5}.hint,.small{color:#cbd5e1;line-height:1.5;font-size:14px}.small{color:#94a3b8}.active{border-color:#facc15}.winner{font-size:22px;font-weight:900;color:#22c55e}
-    .score{display:flex;gap:12px;flex-wrap:wrap}.scorebox{background:#020617;border:1px solid #334155;padding:10px 12px;border-radius:10px;min-width:120px}code{background:#020617;padding:2px 5px;border-radius:5px}
+    .score{display:flex;gap:12px;flex-wrap:wrap}.scorebox{background:#020617;border:1px solid #334155;padding:10px 12px;border-radius:10px;min-width:120px}code{background:#020617;padding:2px 5px;border-radius:5px}.joker-img{width:52px;height:72px;display:block;pointer-events:none}
   </style>
 </head>
 <body>
 <div class="game">
-  <h1>Draw2 · 起两张计分版（含大小王）</h1>
+  <h1>起两张</h1><div class="subtitle">draw2 · score mode · joker svg build</div>
   <div class="panel">
     <div class="status" id="status">加载中...</div>
     <div class="score">
@@ -72,7 +72,13 @@ function value(cards){
 }
 function canBeat(last,cards){const t=type(cards);if(!t)return false;if(!last)return true;if(t!==type(last.cards))return false;return value(cards)>value(last.cards)}
 function label(t){return t==='single'?'单张':t==='pair'?'对子':t==='straight'?'顺子':'非法牌型'}
-function txt(c){return c.rank+(c.suit||'')} function red(c){return c.suit==='♥'||c.suit==='♦'}
+function txt(c){return c.rank+(c.suit||'')}
+function jokerSrc(c){
+  if(c.rank==='小王') return './joker-small.svg';
+  if(c.rank==='大王') return './joker-big.svg';
+  return null;
+}
+function red(c){return c.suit==='♥'||c.suit==='♦'}
 function drawToTwo(p){while(p.hand.length<2&&state.deck.length>0)p.hand.push(state.deck.shift())}
 function init(){state={deck:createDeck(),players:[{name:'你',hand:[],selectedIds:[],pile:[]},{name:'电脑',hand:[],selectedIds:[],pile:[]}],currentPlayer:HUMAN,lastPlay:null,lastWinner:null,message:'你先手。',gameOver:false};drawToTwo(state.players[0]);drawToTwo(state.players[1]);render()}
 function selected(){const p=state.players[HUMAN];return p.hand.filter(c=>p.selectedIds.includes(c.id))}
@@ -85,8 +91,37 @@ function passHuman(){if(state.gameOver||state.currentPlayer!==HUMAN)return;if(!s
 function allPlays(hand){const ps=hand.map(c=>[c]);if(hand.length>=2)ps.push([hand[0],hand[1]]);return ps.filter(p=>type(p))}
 function chooseAi(){const legal=allPlays(state.players[AI].hand).filter(p=>canBeat(state.lastPlay,p));if(!legal.length)return null;if(state.lastPlay){const t=type(state.lastPlay.cards);return legal.filter(p=>type(p)===t).sort((a,b)=>value(a)-value(b))[0]||null}if(state.deck.length===0){const two=legal.filter(p=>p.length===2).sort((a,b)=>value(a)-value(b))[0];if(two)return two}const singles=legal.filter(p=>p.length===1).sort((a,b)=>value(a)-value(b));return singles[0]||legal.sort((a,b)=>value(a)-value(b))[0]}
 function aiLater(){if(state.gameOver||state.currentPlayer!==AI)return;setTimeout(()=>{if(state.gameOver||state.currentPlayer!==AI)return;const p=chooseAi();if(p)execute(AI,p);else clearAfterPass(AI);render();if(!state.gameOver&&state.currentPlayer===AI)aiLater()},500)}
-function renderTable(){const el=document.getElementById('tableCards');el.innerHTML='';const cards=state.lastPlay?state.lastPlay.cards:[];cards.forEach(c=>{const d=document.createElement('div');d.className='card table-card';if(red(c))d.classList.add('red');d.textContent=txt(c);el.appendChild(d)});document.getElementById('tableInfo').textContent=state.lastPlay?'上一手：'+state.players[state.lastPlay.playerIndex].name+'，'+label(type(state.lastPlay.cards))+'，'+state.lastPlay.cards.map(txt).join(' '):'空桌。当前玩家可以任意合法出牌。'}
-function renderCards(id,cards,owner){const el=document.getElementById(id);el.innerHTML='';cards.forEach(c=>{const d=document.createElement('div');d.className='card';if(owner===AI&&!state.gameOver){d.classList.add('back');d.textContent='🂠'}else{if(red(c))d.classList.add('red');d.textContent=txt(c)}if(owner===HUMAN&&state.players[HUMAN].selectedIds.includes(c.id))d.classList.add('selected');if(owner===HUMAN)d.onclick=()=>toggle(c.id);el.appendChild(d)})}
+function renderTable(){const el=document.getElementById('tableCards');el.innerHTML='';const cards=state.lastPlay?state.lastPlay.cards:[];cards.forEach(c=>{const d=document.createElement('div');d.className='card table-card';const js=jokerSrc(c);
+if(js){
+  const img=document.createElement('img');
+  img.src=js;
+  img.alt=c.rank;
+  img.className='joker-img';
+  d.appendChild(img);
+}else{
+  if(red(c))d.classList.add('red');
+  d.textContent=txt(c);
+}
+el.appendChild(d)});document.getElementById('tableInfo').textContent=state.lastPlay?'上一手：'+state.players[state.lastPlay.playerIndex].name+'，'+label(type(state.lastPlay.cards))+'，'+state.lastPlay.cards.map(txt).join(' '):'空桌。当前玩家可以任意合法出牌。'}
+function renderCards(id,cards,owner){const el=document.getElementById(id);el.innerHTML='';cards.forEach(c=>{const d=document.createElement('div');d.className='card';if(owner===AI&&!state.gameOver){
+  d.classList.add('back');
+  d.textContent='🂠';
+}else{
+  const js=jokerSrc(c);
+  if(js){
+    const img=document.createElement('img');
+    img.src=js;
+    img.alt=c.rank;
+    img.className='joker-img';
+    d.appendChild(img);
+  }else{
+    if(red(c))d.classList.add('red');
+    d.textContent=txt(c);
+  }
+}
+if(owner===HUMAN&&state.players[HUMAN].selectedIds.includes(c.id))d.classList.add('selected');
+if(owner===HUMAN)d.onclick=()=>toggle(c.id);
+el.appendChild(d)})}
 function render(){document.getElementById('status').innerHTML=state.gameOver?'<span class="winner">'+state.message+'</span>':state.message+'<br>当前回合：'+state.players[state.currentPlayer].name;document.getElementById('humanScore').textContent=state.players[HUMAN].pile.length;document.getElementById('aiScore').textContent=state.players[AI].pile.length;document.getElementById('deckInfo').textContent=state.deck.length;document.getElementById('player0Panel').classList.toggle('active',state.currentPlayer===HUMAN&&!state.gameOver);document.getElementById('player1Panel').classList.toggle('active',state.currentPlayer===AI&&!state.gameOver);renderTable();renderCards('player0Cards',state.players[HUMAN].hand,HUMAN);renderCards('player1Cards',state.players[AI].hand,AI);const ht=state.currentPlayer===HUMAN&&!state.gameOver;document.getElementById('playBtn').disabled=!ht;document.getElementById('passBtn').disabled=!ht}
 document.getElementById('playBtn').addEventListener('click',playHuman);document.getElementById('passBtn').addEventListener('click',passHuman);document.getElementById('resetBtn').addEventListener('click',init);init();
 })();
