@@ -306,6 +306,9 @@ function getSocket(){
     document.getElementById('lobbyPanel').classList.add('hidden');
     document.getElementById('gameArea').classList.remove('hidden');
     applyLang();
+    // 显示先手提示
+    const iGoFirst = data.firstPlayer === onlineYourIndex;
+    document.getElementById('status').textContent = iGoFirst ? tr('first') : tr('oppFirst');
   });
 
   socket.on('stateUpdate', (view)=>{

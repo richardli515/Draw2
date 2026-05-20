@@ -80,6 +80,11 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (room.players.some((p) => p.socketId === socket.id)) {
+      socket.emit("joinFailed", "不能加入自己创建的房间");
+      return;
+    }
+
     room.players.push({ socketId: socket.id, index: 1 });
     socketRoom[socket.id] = { roomCode, playerIndex: 1 };
     socket.join(roomCode);
