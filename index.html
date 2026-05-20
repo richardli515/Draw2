@@ -4,13 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>起两张</title>
+  <script src="/socket.io/socket.io.js"></script>
   <style>
     body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f172a;color:#e5e7eb;margin:0;padding:14px}
-    .game{max-width:760px;margin:0 auto}.panel{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin-bottom:12px}
+    .game{max-width:760px;margin:0 auto}
+    .panel{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin-bottom:12px}
     .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
     h1{font-size:28px;margin:8px 0 2px;font-weight:900}.subtitle{font-size:11px;opacity:.38;letter-spacing:.8px;margin-bottom:12px}
     h2{font-size:20px;margin:0 0 12px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;min-height:72px}
-    input{background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:10px;padding:11px 12px;font-size:18px;width:120px;text-align:center}
+    input{background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:10px;padding:11px 12px;font-size:18px;width:120px;text-align:center;text-transform:uppercase}
     .card{width:58px;height:80px;border-radius:10px;background:#f8fafc;color:#111827;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;cursor:pointer;user-select:none;border:3px solid transparent;box-shadow:0 5px 10px rgba(0,0,0,.28)}
     .card.red{color:#dc2626}.card.selected{border-color:#38bdf8;transform:translateY(-5px)}.card.back{background:#1d4ed8;color:#bfdbfe;cursor:default}.table-card{width:50px;height:70px;font-size:18px;cursor:default}
     .joker-img{width:52px;height:72px;display:block;pointer-events:none}
@@ -20,7 +22,7 @@
     .status{font-size:17px;font-weight:800;color:#facc15;line-height:1.5}.hint,.small{color:#cbd5e1;line-height:1.5;font-size:14px}.small{color:#94a3b8}.active{border-color:#facc15}.winner{font-size:22px;font-weight:900;color:#22c55e}
     .score{display:flex;gap:12px;flex-wrap:wrap}.scorebox{background:#020617;border:1px solid #334155;padding:10px 12px;border-radius:10px;min-width:120px}
     code{background:#020617;padding:2px 5px;border-radius:5px}.restart-row{min-height:auto;margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,.18)}
-    .room-code{font-size:26px;font-weight:900;letter-spacing:4px;color:#22c55e}.hidden{display:none}
+    .hidden{display:none}.room-code{font-size:26px;font-weight:900;letter-spacing:4px;color:#22c55e}
   </style>
 </head>
 <body>
@@ -28,7 +30,7 @@
   <div class="top">
     <div>
       <h1>起两张</h1>
-      <div class="subtitle">draw2 · solo / online room</div>
+      <div class="subtitle">draw2 · classic solo + online lobby</div>
     </div>
     <button id="langBtn" class="lang">EN</button>
   </div>
@@ -39,43 +41,45 @@
       <button id="soloBtn" data-i18n="solo">单机模式</button>
       <button id="onlineBtn" class="secondary" data-i18n="online">联机模式</button>
     </div>
-    <p class="small" data-i18n="modeHint">单机模式对战电脑；联机模式用房间码与朋友对战。</p>
+    <p class="small" data-i18n="modeHint">单机模式使用稳定旧版逻辑；联机模式先只做房间连接。</p>
   </div>
 
   <div class="panel hidden" id="lobbyPanel">
-    <h2 data-i18n="onlineTitle">联机对战</h2>
-    <div class="hint" id="onlineHint"></div>
+    <h2 data-i18n="onlineTitle">联机大厅</h2>
+    <div class="hint" data-i18n="onlineHint">先验证房间连接：创建房间后发给朋友，对方输入房间码加入。真正联机对局下一步再接。</div>
     <div class="row" style="min-height:auto">
       <button id="hostBtn" data-i18n="host">创建房间</button>
-      <input id="joinInput" maxlength="4" placeholder="房间码" />
+      <input id="roomInput" maxlength="4" placeholder="房间码" />
       <button id="joinBtn" class="secondary" data-i18n="join">加入房间</button>
       <button id="backBtn" class="secondary" data-i18n="back">返回</button>
     </div>
-    <div class="small" id="roomLine"></div>
+    <div class="status" id="lobbyStatus"></div>
   </div>
 
-  <div class="panel hidden" id="gamePanel">
-    <div class="status" id="status">加载中...</div>
-    <div class="score">
-      <div class="scorebox"><span data-i18n="yourPile">你的出牌堆</span>：<b id="myScore">0</b></div>
-      <div class="scorebox"><span id="opPileLabel" data-i18n="opPile">对方出牌堆</span>：<b id="opScore">0</b></div>
-      <div class="scorebox"><span data-i18n="drawPile">起牌牌堆</span>：<b id="deckInfo">0</b></div>
+  <div id="soloGame" class="hidden">
+    <div class="panel">
+      <div class="status" id="status">加载中...</div>
+      <div class="score">
+        <div class="scorebox"><span data-i18n="yourPile">你的出牌堆</span>：<b id="humanScore">0</b></div>
+        <div class="scorebox"><span data-i18n="aiPile">电脑出牌堆</span>：<b id="aiScore">0</b></div>
+        <div class="scorebox"><span data-i18n="drawPile">起牌牌堆</span>：<b id="deckInfo">0</b></div>
+      </div>
+      <div class="hint" id="ruleHint"></div>
     </div>
-    <div class="hint" id="ruleHint"></div>
-  </div>
 
-  <div class="panel hidden" id="opPanel"><h2 id="opTitle" data-i18n="opponent">对方</h2><div class="row" id="opCards"></div></div>
-  <div class="panel hidden" id="tablePanel"><h2 data-i18n="table">桌面</h2><div class="row" id="tableCards"></div><div class="small" id="tableInfo"></div></div>
-  <div class="panel hidden" id="myPanel"><h2 data-i18n="you">你</h2><div class="row" id="myCards"></div></div>
+    <div class="panel" id="player1Panel"><h2 data-i18n="computer">电脑</h2><div class="row" id="player1Cards"></div></div>
+    <div class="panel"><h2 data-i18n="table">桌面</h2><div class="row" id="tableCards"></div><div class="small" id="tableInfo"></div></div>
+    <div class="panel" id="player0Panel"><h2 data-i18n="you">你</h2><div class="row" id="player0Cards"></div></div>
 
-  <div class="panel hidden" id="controlPanel">
-    <div class="row" style="min-height:auto">
-      <button id="playBtn" data-i18n="play">出牌</button>
-      <button id="passBtn" class="secondary">Pass</button>
-    </div>
-    <p class="small" id="instructionLine" data-i18n="instruction">点击你的 1 或 2 张牌，然后点「出牌」。</p>
-    <div class="row restart-row">
-      <button id="resetBtn" class="danger" data-i18n="restart">重新开始</button>
+    <div class="panel">
+      <div class="row" style="min-height:auto">
+        <button id="playBtn" data-i18n="play">出牌</button>
+        <button id="passBtn" class="secondary">Pass</button>
+      </div>
+      <p class="small" data-i18n="instruction">点击你的 1 或 2 张牌，然后点「出牌」。电脑会自动行动。</p>
+      <div class="row restart-row">
+        <button id="resetBtn" class="danger" data-i18n="restart">重新开始</button>
+      </div>
     </div>
   </div>
 </div>
@@ -84,233 +88,91 @@
 (function(){
 const I18N={
  zh:{
-  chooseMode:'选择模式', solo:'单机模式', online:'联机模式', back:'返回', modeHint:'单机模式对战电脑；联机模式用房间码与朋友对战。',
-  onlineTitle:'联机对战', host:'创建房间', join:'加入房间', yourPile:'你的出牌堆', opPile:'对方出牌堆', aiPile:'电脑出牌堆', drawPile:'起牌牌堆', opponent:'对方', computer:'电脑', table:'桌面', you:'你', play:'出牌', restart:'重新开始',
-  onlineHint:'创建房间后，把 4 位房间码发给朋友；对方输入房间码即可加入。',
+  chooseMode:'选择模式', solo:'单机模式', online:'联机模式', back:'返回', modeHint:'单机模式使用稳定旧版逻辑；联机模式先只做房间连接。',
+  onlineTitle:'联机大厅', onlineHint:'先验证房间连接：创建房间后发给朋友，对方输入房间码加入。真正联机对局下一步再接。',
+  host:'创建房间', join:'加入房间',
+  yourPile:'你的出牌堆', aiPile:'电脑出牌堆', drawPile:'起牌牌堆', table:'桌面', computer:'电脑', you:'你', play:'出牌', restart:'重新开始',
+  instruction:'点击你的 1 或 2 张牌，然后点「出牌」。电脑会自动行动。',
   rule:'计分规则：每次出的牌进入自己的出牌堆。起牌牌堆空后，不再补牌。先出完手牌的一方，把对方剩余手牌也收入自己的出牌堆。最后比较出牌堆数量，多者获胜。<br>牌型：单张、对子、两张顺子、王炸。顺子只允许 <code>34</code> 到 <code>KA</code>。小王+大王为王炸，可压任意牌型。',
-  instruction:'点击你的 1 或 2 张牌，然后点「出牌」。',
-  soloInstruction:'点击你的 1 或 2 张牌，然后点「出牌」。电脑会自动行动。',
-  connecting:'连接中...', ready:'准备好了。创建或加入房间。', creating:'正在创建房间...', joining:'正在加入房间...', waiting:'等待对方加入。房间码：', connected:'已连接。', current:'当前回合', emptyTable:'空桌。当前玩家可以任意合法出牌。', lastPlay:'上一手',
-  select:'请先点选要出的牌。', notTurn:'还没轮到你。', invalid:'非法牌型。', cannotBeat:'压不上。请出更大的同类型牌、王炸，或者 Pass。', emptyPass:'空桌不能 Pass，必须出牌。', disconnected:'连接已断开。',
-  soloFirst:'你先手。', youWin:'你获胜！', opWin:'对方获胜。', aiWin:'电脑获胜。', tie:'平局', gameEnd:'游戏结束', cards:'张',
-  youPlayed:'你出了', aiPlayed:'电脑出了', opPlayed:'对方出了',
+  first:'你先手。', current:'当前回合', emptyTable:'空桌。当前玩家可以任意合法出牌。', lastPlay:'上一手', invalid:'非法牌型。只能出单张、对子、34 到 KA 的两张顺子，或王炸。', select:'请先点选要出的牌。', cannotBeat:'压不上。请出更大的同类型牌、王炸，或者 Pass。', emptyPass:'空桌不能 Pass，必须出牌。', pass:'Pass。清桌，', continueFirst:'继续先手。', gameEnd:'游戏结束', humanWin:'你获胜！', aiWin:'电脑获胜。', tie:'平局', yourPile2:'你的出牌堆', aiPile2:'电脑', cards:'张',
+  roomCreated:'房间已创建：', roomReady:'对方已加入，房间连接成功。', joinFailed:'加入失败：',
   types:{single:'单张',pair:'对子',straight:'顺子',kingbomb:'王炸'}
  },
  en:{
-  chooseMode:'Choose Mode', solo:'Solo Mode', online:'Online Mode', back:'Back', modeHint:'Solo mode plays against the computer. Online mode uses a room code to play with a friend.',
-  onlineTitle:'Online Battle', host:'Create Room', join:'Join Room', yourPile:'Your pile', opPile:'Opponent pile', aiPile:'Computer pile', drawPile:'Draw pile', opponent:'Opponent', computer:'Computer', table:'Table', you:'You', play:'Play', restart:'Restart',
-  onlineHint:'Create a room and share the 4-digit room code. The other player enters the code to join.',
+  chooseMode:'Choose Mode', solo:'Solo Mode', online:'Online Mode', back:'Back', modeHint:'Solo uses the stable classic logic. Online mode only tests room connection for now.',
+  onlineTitle:'Online Lobby', onlineHint:'First test room connection: create a room and share the code. The real online match will be connected next.',
+  host:'Create Room', join:'Join Room',
+  yourPile:'Your pile', aiPile:'Computer pile', drawPile:'Draw pile', table:'Table', computer:'Computer', you:'You', play:'Play', restart:'Restart',
+  instruction:'Select 1 or 2 cards, then tap Play. The computer moves automatically.',
   rule:'Scoring: every played card goes into your own pile. When the draw pile is empty, no more cards are drawn. The first player to empty their hand takes the opponent’s remaining hand into their pile. Higher pile count wins.<br>Hands: single, pair, two-card straight, Joker Bomb. Straights only run from <code>34</code> to <code>KA</code>. Small Joker + Big Joker is Joker Bomb and beats any hand type.',
-  instruction:'Select 1 or 2 cards, then tap Play.',
-  soloInstruction:'Select 1 or 2 cards, then tap Play. The computer moves automatically.',
-  connecting:'Connecting...', ready:'Ready. Create or join a room.', creating:'Creating room...', joining:'Joining room...', waiting:'Waiting for opponent. Room code: ', connected:'Connected.', current:'Current turn', emptyTable:'Empty table. Current player may play any legal hand.', lastPlay:'Last play',
-  select:'Select cards first.', notTurn:'Not your turn.', invalid:'Invalid hand.', cannotBeat:'Cannot beat it. Play a higher same-type hand, Joker Bomb, or Pass.', emptyPass:'Cannot Pass on an empty table. You must play.', disconnected:'Disconnected.',
-  soloFirst:'You go first.', youWin:'You win!', opWin:'Opponent wins.', aiWin:'Computer wins.', tie:'Tie', gameEnd:'Game over', cards:'cards',
-  youPlayed:'You played', aiPlayed:'Computer played', opPlayed:'Opponent played',
+  first:'You go first.', current:'Current turn', emptyTable:'Empty table. Current player may play any legal hand.', lastPlay:'Last play', invalid:'Invalid hand. Play a single, pair, 34-to-KA straight, or Joker Bomb.', select:'Select cards first.', cannotBeat:'Cannot beat it. Play a higher same-type hand, Joker Bomb, or Pass.', emptyPass:'Cannot Pass on an empty table. You must play.', pass:'passed. Table reset. ', continueFirst:' continues first.', gameEnd:'Game over', humanWin:'You win!', aiWin:'Computer wins.', tie:'Tie', yourPile2:'Your pile', aiPile2:'computer', cards:'cards',
+  roomCreated:'Room created: ', roomReady:'Opponent joined. Room connection works.', joinFailed:'Join failed: ',
   types:{single:'single',pair:'pair',straight:'straight',kingbomb:'Joker Bomb'}
  }
 };
-
-let lang='zh', mode=null;
-let ws=null, playerIndex=null, game=null, selectedIds=[];
+let lang='zh';
 const RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A','2','小王','大王'];
 const STRAIGHT_RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A'];
 const NORMAL_RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
-const SUITS=['♠','♥','♣','♦'];
+const SUITS=['♠','♥','♣','♦']; const HUMAN=0,AI=1; let state;
+let socket=null;
 
 function tr(k){return I18N[lang][k]}
 function typeLabel(t){return I18N[lang].types[t]||'?'}
+
 function applyLang(){
  document.documentElement.lang=lang==='zh'?'zh-CN':'en';
  document.getElementById('langBtn').textContent=lang==='zh'?'EN':'中文';
  document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=tr(el.dataset.i18n)});
  document.getElementById('ruleHint').innerHTML=tr('rule');
- document.getElementById('onlineHint').textContent=tr('onlineHint');
- document.getElementById('opPileLabel').textContent=mode==='solo'?tr('aiPile'):tr('opPile');
- document.getElementById('opTitle').textContent=mode==='solo'?tr('computer'):tr('opponent');
- document.getElementById('instructionLine').textContent=mode==='solo'?tr('soloInstruction'):tr('instruction');
  render();
-}
-function showGamePanels(){
- ['gamePanel','opPanel','tablePanel','myPanel','controlPanel'].forEach(id=>document.getElementById(id).classList.remove('hidden'));
-}
-function showMode(){
- mode=null;
- document.getElementById('modePanel').classList.remove('hidden');
- document.getElementById('lobbyPanel').classList.add('hidden');
- ['gamePanel','opPanel','tablePanel','myPanel','controlPanel'].forEach(id=>document.getElementById(id).classList.add('hidden'));
-}
-function setStatus(s){document.getElementById('status').textContent=s}
-function wsUrl(){return (location.protocol==='https:'?'wss:':'ws:')+'//'+location.host}
-function connectWs(){
- return new Promise((resolve,reject)=>{
-   if(ws&&ws.readyState===WebSocket.OPEN)return resolve();
-   ws=new WebSocket(wsUrl());
-   ws.onopen=resolve;
-   ws.onerror=reject;
-   ws.onclose=()=>setStatus(tr('disconnected'));
-   ws.onmessage=(event)=>{
-     const msg=JSON.parse(event.data);
-     if(msg.type==='error'){setStatus(msg.error);return}
-     if(msg.type==='state'){
-       playerIndex=msg.playerIndex;
-       game=msg.game;
-       if(msg.roomCode)document.getElementById('roomLine').innerHTML=tr('waiting')+' <span class="room-code">'+msg.roomCode+'</span>';
-       if(msg.notice)setStatus(msg.notice);
-       document.getElementById('lobbyPanel').classList.add('hidden');
-       showGamePanels();
-       render();
-     }
-   };
- });
-}
-function sendOnline(type,payload={}){
- if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type,...payload}));
-}
-function startSolo(){
- mode='solo'; playerIndex=0; game=newGame(tr('soloFirst'));
- document.getElementById('modePanel').classList.add('hidden');
- document.getElementById('lobbyPanel').classList.add('hidden');
- showGamePanels();
- applyLang();
- render();
-}
-function chooseOnline(){
- mode='online';
- document.getElementById('modePanel').classList.add('hidden');
- document.getElementById('lobbyPanel').classList.remove('hidden');
- setStatus(tr('ready'));
- applyLang();
-}
-async function hostRoom(){
- setStatus(tr('creating'));
- await connectWs();
- sendOnline('host');
-}
-async function joinRoom(){
- const code=document.getElementById('joinInput').value.trim();
- if(!code)return;
- setStatus(tr('joining'));
- await connectWs();
- sendOnline('join',{roomCode:code});
 }
 function createDeck(){
- const d=[];for(const r of NORMAL_RANKS)for(const s of SUITS)d.push({rank:r,suit:s,id:r+s+Math.random()});
- d.push({rank:'小王',suit:'',id:'小王'+Math.random()});d.push({rank:'大王',suit:'',id:'大王'+Math.random()});
- return shuffle(d)
+  const d=[]; for(const r of NORMAL_RANKS)for(const s of SUITS)d.push({rank:r,suit:s,id:r+s+Math.random()});
+  d.push({rank:'小王',suit:'',id:'小王'+Math.random()}); d.push({rank:'大王',suit:'',id:'大王'+Math.random()});
+  return shuffle(d)
 }
 function shuffle(d){for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]]}return d}
-function newGame(firstMsg){
- const g={deck:createDeck(),players:[{hand:[],pile:[]},{hand:[],pile:[]}],currentPlayer:0,lastPlay:null,lastWinner:null,message:firstMsg,gameOver:false};
- drawToTwo(g.players[0],g); drawToTwo(g.players[1],g); return g;
-}
-function drawToTwo(p,g){while(p.hand.length<2&&g.deck.length>0)p.hand.push(g.deck.shift())}
 function rv(r){return RANKS.indexOf(r)}
 function sv(cards){if(cards.length!==2)return-1;const v=cards.map(c=>STRAIGHT_RANKS.indexOf(c.rank));if(v.includes(-1))return-1;v.sort((a,b)=>a-b);return v[1]-v[0]===1?v[1]:-1}
 function isKingBomb(cards){return cards.length===2&&cards.some(c=>c.rank==='小王')&&cards.some(c=>c.rank==='大王')}
 function type(cards){if(isKingBomb(cards))return'kingbomb';if(cards.length===1)return'single';if(cards.length===2&&cards[0].rank===cards[1].rank)return'pair';if(sv(cards)!==-1)return'straight';return null}
 function value(cards){if(isKingBomb(cards))return 999;if(type(cards)==='straight')return sv(cards);return rv(cards[0].rank)}
 function canBeat(last,cards){const t=type(cards);if(!t)return false;if(!last)return true;if(isKingBomb(cards))return true;if(isKingBomb(last.cards))return false;if(t!==type(last.cards))return false;return value(cards)>value(last.cards)}
-function cardText(c){return c.rank+(c.suit||'')}
-function executePlay(i,cardIds){
- const p=game.players[i]; const cards=cardIds.map(id=>p.hand.find(c=>c.id===id)).filter(Boolean);
- if(cards.length!==cardIds.length||cards.length===0||cards.length>2)return tr('select');
- if(!type(cards))return tr('invalid');
- if(!canBeat(game.lastPlay,cards))return tr('cannotBeat');
- p.hand=p.hand.filter(c=>!cardIds.includes(c.id)); p.pile.push(...cards);
- game.lastPlay={playerIndex:i,cards}; game.lastWinner=i;
- drawToTwo(p,game); checkEnd(i);
- if(!game.gameOver){
-   game.currentPlayer=1-i;
-   const key=i===0?'youPlayed':'aiPlayed';
-   game.message=tr(key)+' '+cards.map(cardText).join(' ')+'（'+typeLabel(type(cards))+'）。';
- }
- return null;
-}
-function executePass(i){
- if(!game.lastPlay)return tr('emptyPass');
- const w=game.lastWinner; game.lastPlay=null; game.currentPlayer=w;
- const passer=i===0?tr('you'):tr('computer'); const winner=w===0?tr('you'):tr('computer');
- game.message=lang==='zh'?passer+' Pass。清桌，'+winner+'继续先手。':passer+' passed. '+winner+' continues first.';
- return null;
-}
-function checkEnd(i){
- if(game.deck.length!==0)return; if(game.players[i].hand.length!==0)return;
- const other=1-i; const winner=game.players[i], loser=game.players[other];
- if(loser.hand.length){winner.pile.push(...loser.hand);loser.hand=[]}
- game.gameOver=true;
- const mine=game.players[playerIndex].pile.length, op=game.players[1-playerIndex].pile.length;
- if(mine>op)game.message=tr('gameEnd')+'：'+tr('youWin');
- else if(op>mine)game.message=tr('gameEnd')+'：'+(mode==='solo'?tr('aiWin'):tr('opWin'));
- else game.message=tr('gameEnd')+'：'+tr('tie');
-}
-function handleSoloAction(action){
- if(!game||game.gameOver)return;
- if(action.type==='restart'){game=newGame(tr('soloFirst'));return}
- if(game.currentPlayer!==0){game.message=tr('notTurn');return}
- let err=null;
- if(action.type==='play')err=executePlay(0,action.cardIds||[]);
- if(action.type==='pass')err=executePass(0);
- if(err)game.message=err;
-}
-function submitAction(action){
- if(!game)return;
- if(mode==='solo'){
-   handleSoloAction(action);
-   selectedIds=[];
-   render();
-   aiLater();
- }else{
-   sendOnline(action.type, action.type==='play'?{cardIds:selectedIds}:{});
-   selectedIds=[];
-   render();
- }
-}
+function txt(c){return c.rank+(c.suit||'')}
+function jokerSrc(c){if(c.rank==='小王')return'./joker-small.svg';if(c.rank==='大王')return'./joker-big.svg';return null}
+function red(c){return c.suit==='♥'||c.suit==='♦'}
+function playerName(i){return i===HUMAN?tr('you'):tr('computer')}
+function drawToTwo(p){while(p.hand.length<2&&state.deck.length>0)p.hand.push(state.deck.shift())}
+function init(){state={deck:createDeck(),players:[{name:'你',hand:[],selectedIds:[],pile:[]},{name:'电脑',hand:[],selectedIds:[],pile:[]}],currentPlayer:HUMAN,lastPlay:null,lastWinner:null,message:tr('first'),gameOver:false};drawToTwo(state.players[0]);drawToTwo(state.players[1]);render()}
+function selected(){const p=state.players[HUMAN];return p.hand.filter(c=>p.selectedIds.includes(c.id))}
+function toggle(id){if(state.gameOver||state.currentPlayer!==HUMAN)return;const p=state.players[HUMAN];if(p.selectedIds.includes(id))p.selectedIds=p.selectedIds.filter(x=>x!==id);else{if(p.selectedIds.length>=2)return;p.selectedIds.push(id)}render()}
+function execute(i,cards){const p=state.players[i];p.hand=p.hand.filter(c=>!cards.some(x=>x.id===c.id));p.selectedIds=[];p.pile.push(...cards);state.lastPlay={playerIndex:i,cards};state.lastWinner=i;drawToTwo(p);checkEnd(i);if(!state.gameOver){state.currentPlayer=1-i;state.message=playerName(i)+' '+(lang==='zh'?'出了':'played')+' '+cards.map(txt).join(' ')+'（'+typeLabel(type(cards))+'）。'}}
+function checkEnd(i){if(state.deck.length!==0)return;if(state.players[i].hand.length!==0)return;const other=1-i;const winner=state.players[i];const loser=state.players[other];if(loser.hand.length>0){winner.pile.push(...loser.hand);loser.hand=[]}state.gameOver=true;const hs=state.players[HUMAN].pile.length,as=state.players[AI].pile.length;if(hs>as)state.message=tr('gameEnd')+'：'+tr('humanWin')+' '+tr('yourPile2')+' '+hs+' '+tr('cards')+'，'+tr('aiPile2')+' '+as+' '+tr('cards')+'。';else if(as>hs)state.message=tr('gameEnd')+'：'+tr('aiWin')+' '+tr('aiPile2')+' '+as+' '+tr('cards')+'，'+tr('yourPile2')+' '+hs+' '+tr('cards')+'。';else state.message=tr('gameEnd')+'：'+tr('tie')+'，'+hs+' '+tr('cards')+'。'}
+function playHuman(){if(state.gameOver||state.currentPlayer!==HUMAN)return;const cards=selected();if(cards.length===0){state.message=tr('select');render();return}if(!type(cards)){state.message=tr('invalid');render();return}if(!canBeat(state.lastPlay,cards)){state.message=tr('cannotBeat');render();return}execute(HUMAN,cards);render();aiLater()}
+function clearAfterPass(passer){const w=state.lastWinner;state.players[passer].selectedIds=[];state.lastPlay=null;state.currentPlayer=w;state.message=lang==='zh'?playerName(passer)+' '+tr('pass')+playerName(w)+tr('continueFirst'):playerName(passer)+' '+tr('pass')+playerName(w)+tr('continueFirst')}
+function passHuman(){if(state.gameOver||state.currentPlayer!==HUMAN)return;if(!state.lastPlay){state.message=tr('emptyPass');render();return}clearAfterPass(HUMAN);render();aiLater()}
 function allPlays(hand){const ps=hand.map(c=>[c]);if(hand.length>=2)ps.push([hand[0],hand[1]]);return ps.filter(p=>type(p))}
-function chooseAi(){
- const legal=allPlays(game.players[1].hand).filter(p=>canBeat(game.lastPlay,p));
- if(!legal.length)return null;
- if(game.lastPlay){
-   const t=type(game.lastPlay.cards);
-   if(t==='kingbomb')return null;
-   return legal.filter(p=>type(p)===t||type(p)==='kingbomb').sort((a,b)=>value(a)-value(b))[0]||null;
- }
- if(game.deck.length===0){const two=legal.filter(p=>p.length===2).sort((a,b)=>value(a)-value(b))[0];if(two)return two}
- const singles=legal.filter(p=>p.length===1).sort((a,b)=>value(a)-value(b));
- return singles[0]||legal.sort((a,b)=>value(a)-value(b))[0];
-}
-function aiLater(){
- if(mode!=='solo'||!game||game.gameOver||game.currentPlayer!==1)return;
- setTimeout(()=>{if(!game||game.gameOver||game.currentPlayer!==1)return;const p=chooseAi();if(p)executePlay(1,p.map(c=>c.id));else executePass(1);render();if(!game.gameOver&&game.currentPlayer===1)aiLater()},500);
-}
-function me(){return game?.players?.[playerIndex]}
-function op(){return game?.players?.[1-playerIndex]}
-function toggle(id){if(!game||game.gameOver||game.currentPlayer!==playerIndex)return;if(selectedIds.includes(id))selectedIds=selectedIds.filter(x=>x!==id);else{if(selectedIds.length>=2)return;selectedIds.push(id)}render()}
-function txt(c){return c.rank+(c.suit||'')}function jokerSrc(c){if(c.rank==='小王')return'./joker-small.svg';if(c.rank==='大王')return'./joker-big.svg';return null}function red(c){return c.suit==='♥'||c.suit==='♦'}
-function cardDiv(c,mode){const d=document.createElement('div');d.className='card';if(mode==='back'){d.classList.add('back');d.textContent='🂠';return d}const js=jokerSrc(c);if(js){const img=document.createElement('img');img.src=js;img.alt=c.rank;img.className='joker-img';d.appendChild(img)}else{if(red(c))d.classList.add('red');d.textContent=txt(c)}if(mode==='mine'){if(selectedIds.includes(c.id))d.classList.add('selected');d.onclick=()=>toggle(c.id)}return d}
-function renderCards(id,cards,mode){const el=document.getElementById(id);el.innerHTML='';cards.forEach(c=>el.appendChild(cardDiv(c,mode)))}
-function renderBacks(id,count){const el=document.getElementById(id);el.innerHTML='';for(let i=0;i<count;i++)el.appendChild(cardDiv({},'back'))}
-function renderTable(){const el=document.getElementById('tableCards');el.innerHTML='';const cards=game?.lastPlay?.cards||[];cards.forEach(c=>{const d=cardDiv(c,'table');d.classList.add('table-card');el.appendChild(d)});document.getElementById('tableInfo').textContent=game?.lastPlay?tr('lastPlay')+'：'+(game.lastPlay.playerIndex===playerIndex?tr('you'):(mode==='solo'?tr('computer'):tr('opponent')))+'，'+cards.map(txt).join(' '):tr('emptyTable')}
-function render(){
- if(!game)return;
- document.getElementById('status').innerHTML=game.gameOver?'<span class="winner">'+game.message+'</span>':game.message+'<br>'+tr('current')+'：'+(game.currentPlayer===playerIndex?tr('you'):(mode==='solo'?tr('computer'):tr('opponent')));
- document.getElementById('myScore').textContent=me()?.pileCount||0;
- document.getElementById('opScore').textContent=op()?.pileCount||0;
- document.getElementById('deckInfo').textContent=game.deckCount??(game.deck?.length||0);
- document.getElementById('myPanel').classList.toggle('active',game.currentPlayer===playerIndex&&!game.gameOver);
- document.getElementById('opPanel').classList.toggle('active',game.currentPlayer!==playerIndex&&!game.gameOver);
- renderTable(); renderCards('myCards',me()?.hand||[],'mine'); renderBacks('opCards',op()?.handCount||0);
- const turn=game.currentPlayer===playerIndex&&!game.gameOver; document.getElementById('playBtn').disabled=!turn; document.getElementById('passBtn').disabled=!turn;
-}
-document.getElementById('soloBtn').onclick=startSolo;
-document.getElementById('onlineBtn').onclick=chooseOnline;
-document.getElementById('backBtn').onclick=showMode;
-document.getElementById('hostBtn').onclick=hostRoom;
-document.getElementById('joinBtn').onclick=joinRoom;
-document.getElementById('playBtn').onclick=()=>submitAction({type:'play',cardIds:selectedIds});
-document.getElementById('passBtn').onclick=()=>submitAction({type:'pass'});
-document.getElementById('resetBtn').onclick=()=>submitAction({type:'restart'});
-document.getElementById('langBtn').onclick=()=>{lang=lang==='zh'?'en':'zh';applyLang()};
+function chooseAi(){const legal=allPlays(state.players[AI].hand).filter(p=>canBeat(state.lastPlay,p));if(!legal.length)return null;if(state.lastPlay){const t=type(state.lastPlay.cards);if(t==='kingbomb')return null;return legal.filter(p=>type(p)===t||type(p)==='kingbomb').sort((a,b)=>value(a)-value(b))[0]||null}if(state.deck.length===0){const two=legal.filter(p=>p.length===2).sort((a,b)=>value(a)-value(b))[0];if(two)return two}const singles=legal.filter(p=>p.length===1).sort((a,b)=>value(a)-value(b));return singles[0]||legal.sort((a,b)=>value(a)-value(b))[0]}
+function aiLater(){if(state.gameOver||state.currentPlayer!==AI)return;setTimeout(()=>{if(state.gameOver||state.currentPlayer!==AI)return;const p=chooseAi();if(p)execute(AI,p);else clearAfterPass(AI);render();if(!state.gameOver&&state.currentPlayer===AI)aiLater()},500)}
+function renderTable(){if(!state)return;const el=document.getElementById('tableCards');el.innerHTML='';const cards=state.lastPlay?state.lastPlay.cards:[];cards.forEach(c=>{const d=document.createElement('div');d.className='card table-card';const js=jokerSrc(c);if(js){const img=document.createElement('img');img.src=js;img.alt=c.rank;img.className='joker-img';d.appendChild(img)}else{if(red(c))d.classList.add('red');d.textContent=txt(c)}el.appendChild(d)});document.getElementById('tableInfo').textContent=state.lastPlay?tr('lastPlay')+'：'+playerName(state.lastPlay.playerIndex)+'，'+typeLabel(type(state.lastPlay.cards))+'，'+state.lastPlay.cards.map(txt).join(' '):tr('emptyTable')}
+function renderCards(id,cards,owner){const el=document.getElementById(id);el.innerHTML='';cards.forEach(c=>{const d=document.createElement('div');d.className='card';if(owner===AI&&!state.gameOver){d.classList.add('back');d.textContent='🂠'}else{const js=jokerSrc(c);if(js){const img=document.createElement('img');img.src=js;img.alt=c.rank;img.className='joker-img';d.appendChild(img)}else{if(red(c))d.classList.add('red');d.textContent=txt(c)}}if(owner===HUMAN&&state.players[HUMAN].selectedIds.includes(c.id))d.classList.add('selected');if(owner===HUMAN)d.onclick=()=>toggle(c.id);el.appendChild(d)})}
+function render(){if(!state)return;document.getElementById('status').innerHTML=state.gameOver?'<span class="winner">'+state.message+'</span>':state.message+'<br>'+tr('current')+'：'+playerName(state.currentPlayer);document.getElementById('humanScore').textContent=state.players[HUMAN].pile.length;document.getElementById('aiScore').textContent=state.players[AI].pile.length;document.getElementById('deckInfo').textContent=state.deck.length;document.getElementById('player0Panel').classList.toggle('active',state.currentPlayer===HUMAN&&!state.gameOver);document.getElementById('player1Panel').classList.toggle('active',state.currentPlayer===AI&&!state.gameOver);renderTable();renderCards('player0Cards',state.players[HUMAN].hand,HUMAN);renderCards('player1Cards',state.players[AI].hand,AI);const ht=state.currentPlayer===HUMAN&&!state.gameOver;document.getElementById('playBtn').disabled=!ht;document.getElementById('passBtn').disabled=!ht}
+
+function showMode(){document.getElementById('modePanel').classList.remove('hidden');document.getElementById('lobbyPanel').classList.add('hidden');document.getElementById('soloGame').classList.add('hidden')}
+function startSolo(){document.getElementById('modePanel').classList.add('hidden');document.getElementById('lobbyPanel').classList.add('hidden');document.getElementById('soloGame').classList.remove('hidden');init()}
+function startOnline(){document.getElementById('modePanel').classList.add('hidden');document.getElementById('lobbyPanel').classList.remove('hidden');document.getElementById('soloGame').classList.add('hidden');document.getElementById('lobbyStatus').textContent=''}
+function getSocket(){if(socket)return socket;socket=io();socket.on('roomCreated',(code)=>{document.getElementById('lobbyStatus').innerHTML=tr('roomCreated')+'<span class="room-code">'+code+'</span>'});socket.on('roomReady',()=>{document.getElementById('lobbyStatus').textContent=tr('roomReady')});socket.on('joinFailed',(msg)=>{document.getElementById('lobbyStatus').textContent=tr('joinFailed')+msg});return socket}
+
+document.getElementById('soloBtn').addEventListener('click',startSolo);
+document.getElementById('onlineBtn').addEventListener('click',startOnline);
+document.getElementById('backBtn').addEventListener('click',showMode);
+document.getElementById('hostBtn').addEventListener('click',()=>getSocket().emit('createRoom'));
+document.getElementById('joinBtn').addEventListener('click',()=>getSocket().emit('joinRoom',document.getElementById('roomInput').value));
+document.getElementById('playBtn').addEventListener('click',playHuman);
+document.getElementById('passBtn').addEventListener('click',passHuman);
+document.getElementById('resetBtn').addEventListener('click',init);
+document.getElementById('langBtn').addEventListener('click',()=>{lang=lang==='zh'?'en':'zh';applyLang()});
 applyLang();showMode();
 })();
 </script>
