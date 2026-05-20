@@ -163,10 +163,14 @@
     return { ok: true };
   }
 
-  // 执行 pass：清桌，由上一手赢家继续先手。
+  // 执行 pass：赢家先补满两张，pass 方再补满，然后清桌由赢家继续先手。
   function applyPass(state, playerIndex) {
+    const winner = state.lastWinner;
+    const passer = playerIndex;
+    drawToTwo(state.players[winner], state.deck);
+    drawToTwo(state.players[passer], state.deck);
     state.lastPlay = null;
-    state.currentPlayer = state.lastWinner;
+    state.currentPlayer = winner;
   }
 
   // AI 决策（单机用）。
