@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Speed · 闪电战</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f172a;color:#e5e7eb;margin:0;padding:14px}
+.game{max-width:760px;margin:0 auto}
+.panel{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin-bottom:12px}
+h1{font-size:28px;margin:8px 0 2px;font-weight:900}
+.subtitle{font-size:11px;opacity:.38;letter-spacing:.8px;margin-bottom:4px}
+h2{font-size:18px;margin:0 0 10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-height:60px}
+input{background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:10px;padding:11px 12px;font-size:18px;width:110px;text-align:center;text-transform:uppercase}
+button{background:#7c3aed;color:white;border:0;border-radius:10px;padding:11px 15px;font-size:15px;font-weight:800;cursor:pointer;transition:opacity .15s}
+button.secondary{background:#475569}
+button.danger{background:#dc2626}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:active:not(:disabled){opacity:.7}
+.status{font-size:16px;font-weight:800;color:#facc15;line-height:1.5}
+.hint{color:#cbd5e1;font-size:14px;line-height:1.6}
+.small{color:#94a3b8;font-size:13px}
+.hidden{display:none}
+.room-code{font-size:26px;font-weight:900;letter-spacing:4px;color:#22c55e}
+a.back{color:#94a3b8;font-size:13px;text-decoration:none}
+a.back:hover{color:#e5e7eb}
+.winner-text{font-size:22px;font-weight:900;color:#22c55e}
+.loser-text{font-size:22px;font-weight:900;color:#ef4444}
+
+/* 手牌 */
+.hand{display:flex;gap:8px;flex-wrap:wrap;min-height:96px;align-items:center;padding:4px 0}
+.card{width:56px;height:80px;border-radius:10px;background:#f8fafc;color:#111827;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;cursor:pointer;user-select:none;border:3px solid transparent;box-shadow:0 4px 8px rgba(0,0,0,.3);flex-shrink:0;transition:transform .1s,border-color .1s}
+.card.red{color:#dc2626}
+.card.selected{border-color:#7c3aed;transform:translateY(-8px)}
+.card.back{background:#4c1d95;color:#c4b5fd;cursor:default}
+.card.empty-slot{background:transparent;border:2px dashed #334155;color:#475569;font-size:12px;cursor:default;box-shadow:none}
+.card.pile-card{width:64px;height:90px;font-size:20px;cursor:pointer;border-color:transparent}
+.card.pile-card:hover{border-color:#7c3aed}
+.card.pile-card.can-play{border-color:#22c55e;box-shadow:0 0 12px rgba(34,197,94,.4)}
+
+/* 桌面 */
+.table-area{display:flex;justify-content:center;align-items:center;gap:32px;padding:8px 0}
+.pile-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+.pile-label{font-size:11px;color:#64748b;letter-spacing:.5px}
+
+/* 牌堆计数 */
+.deck-badge{background:#020617;border:1px solid #334155;border-radius:6px;padding:2px 8px;font-size:12px;color:#94a3b8;display:inline-block;margin-left:8px}
+
+/* pass 指示 */
+.pass-flag{display:inline-block;background:#374151;border-radius:6px;padding:2px 8px;font-size:12px;color:#fbbf24;margin-left:8px}
+</style>
+</head>
+<body>
+<div class="game">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <a href="/" class="back">← 起两张</a>
+      <h1>⚡ Speed</h1>
+      <div class="subtitle">闪电战 · 实时对战</div>
+    </div>
+  </div>
+
+  <!-- 大厅 -->
+  <div class="panel" id="lobbyPanel">
+    <h2>联机大厅</h2>
+    <div class="hint" style="margin-bottom:10px">
+      创建房间后把房间码发给朋友，对方输入后即可开局。
+    </div>
+    <div class="panel" style="background:#0f172a;margin-bottom:12px;padding:10px 14px">
+      <p class="small" style="margin:0;line-height:1.9">
+        📋 <b style="color:#e5e7eb">规则</b>：每人 15 张牌堆 + 5 张手牌，桌面 2 张明牌。<br>
+        选一张手牌 → 点桌面的堆放上去（差 ±1，A 接 K 循环）。<br>
+        出牌成功立即补满 5 张。双方同时出牌，先到先得。<br>
+        没牌可出就点 Pass；双方都 Pass 时桌面自动翻新牌。<br>
+        手牌和牌堆都清空的人获胜。
+      </p>
+    </div>
+    <div class="row" style="min-height:auto">
+      <button id="hostBtn">创建房间</button>
+      <input id="roomInput" maxlength="4" placeholder="房间码"/>
+      <button id="joinBtn" class="secondary">加入房间</button>
+    </div>
+    <div class="status" id="lobbyStatus" style="margin-top:12px"></div>
+  </div>
+
+  <!-- 游戏区 -->
+  <div id="gameArea" class="hidden">
+
+    <!-- 状态栏 -->
+    <div class="panel" style="padding:10px 14px">
+      <div class="status" id="gameStatus"></div>
+    </div>
+
+    <!-- 对手 -->
+    <div class="panel" id="oppPanel">
+      <h2>
+        对手
+        <span class="deck-badge" id="oppDeck">牌堆 0</span>
+        <span class="pass-flag hidden" id="oppPassFlag">Pass</span>
+      </h2>
+      <div class="hand" id="oppHand"></div>
+    </div>
+
+    <!-- 桌面 -->
+    <div class="panel">
+      <h2>桌面 <span class="small">— 选手牌后点这里出牌</span></h2>
+      <div class="table-area">
+        <div class="pile-wrap">
+          <div class="pile-label">堆 1</div>
+          <div class="card pile-card empty-slot" id="pile0" onclick="onPileClick(0)">空</div>
+        </div>
+        <div class="pile-wrap">
+          <div class="pile-label">堆 2</div>
+          <div class="card pile-card empty-slot" id="pile1" onclick="onPileClick(1)">空</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 我的手牌 -->
+    <div class="panel" id="myPanel">
+      <h2>
+        你
+        <span class="deck-badge" id="myDeck">牌堆 0</span>
+        <span class="pass-flag hidden" id="myPassFlag">Pass</span>
+      </h2>
+      <div class="hand" id="myHand"></div>
+    </div>
+
+    <!-- 操作 -->
+    <div class="panel">
+      <div class="row" style="min-height:auto">
+        <button id="passBtn" class="secondary" disabled>Pass</button>
+        <button id="exitBtn" class="secondary">退出</button>
+      </div>
+      <p class="small" style="margin:6px 0 0">选手牌 → 点桌面堆出牌。没牌可出时点 Pass。</p>
+    </div>
+
+    <!-- 结果 -->
+    <div class="panel hidden" id="resultPanel">
+      <div id="resultMsg" style="font-size:22px;font-weight:900;margin-bottom:12px"></div>
+      <div class="row" style="min-height:auto">
+        <button id="restartBtn">再来一局</button>
+        <button id="exitBtn2" class="secondary">退出</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+let socket = null;
+let myIndex = null;
+let selectedCardId = null;
+let currentView = null;
+
+// ── 工具 ──
+function isRed(c){ return c && (c.suit==='♥'||c.suit==='♦'); }
+
+function rankLabel(c){
+  if(!c) return '空';
+  return c.rank + (c.suit||'');
+}
+
+function adjacent(a, b){
+  if(!a||!b) return false;
+  const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const ai=RANKS.indexOf(a.rank), bi=RANKS.indexOf(b.rank);
+  const diff=Math.abs(ai-bi);
+  return diff===1||diff===12;
+}
+
+// ── 渲染 ──
+function render(view){
+  if(!view) return;
+  currentView = view;
+
+  // 状态
+  const myPass = view.passFlags[myIndex];
+  const oppPass = view.passFlags[1-myIndex];
+  let statusTxt = '';
+  if(myPass && oppPass) statusTxt = '双方都 Pass，翻新牌中...';
+  else if(myPass) statusTxt = '你已 Pass，等待对手...';
+  else statusTxt = '出牌！选手牌 → 点桌面堆';
+  document.getElementById('gameStatus').textContent = statusTxt;
+
+  // 牌堆计数
+  document.getElementById('myDeck').textContent = '牌堆 '+view.you.deckCount;
+  document.getElementById('oppDeck').textContent = '牌堆 '+view.opponent.deckCount;
+
+  // pass 标记
+  document.getElementById('myPassFlag').classList.toggle('hidden', !myPass);
+  document.getElementById('oppPassFlag').classList.toggle('hidden', !oppPass);
+
+  // 桌面
+  renderPile(0, view.piles[0]);
+  renderPile(1, view.piles[1]);
+
+  // 手牌
+  renderMyHand(view.you.hand);
+  renderOppHand(view.opponent.handCount);
+
+  // pass 按钮
+  document.getElementById('passBtn').disabled = view.gameOver || myPass;
+}
+
+function renderPile(idx, topCard){
+  const el = document.getElementById('pile'+idx);
+  if(!topCard){
+    el.className='card pile-card empty-slot';
+    el.textContent='空';
+    return;
+  }
+  el.className='card pile-card'+(isRed(topCard)?' red':'');
+  el.textContent=rankLabel(topCard);
+
+  // 高亮：当前选中手牌可以放到这堆
+  if(selectedCardId && currentView){
+    const selCard = currentView.you.hand.find(c=>c.id===selectedCardId);
+    if(selCard && adjacent(selCard, topCard)){
+      el.classList.add('can-play');
+    }
+  }
+}
+
+function renderMyHand(cards){
+  const el=document.getElementById('myHand');
+  el.innerHTML='';
+  if(!cards||cards.length===0){
+    const e=document.createElement('div');
+    e.className='card empty-slot';
+    e.textContent='空';
+    el.appendChild(e);
+    return;
+  }
+  cards.forEach(c=>{
+    const d=document.createElement('div');
+    d.className='card'+(isRed(c)?' red':'')+(selectedCardId===c.id?' selected':'');
+    d.textContent=rankLabel(c);
+    d.onclick=()=>selectCard(c.id, cards);
+    el.appendChild(d);
+  });
+}
+
+function renderOppHand(count){
+  const el=document.getElementById('oppHand');
+  el.innerHTML='';
+  for(let i=0;i<count;i++){
+    const d=document.createElement('div');
+    d.className='card back';
+    d.textContent='🂠';
+    el.appendChild(d);
+  }
+  if(count===0){
+    const e=document.createElement('div');
+    e.className='card empty-slot';
+    e.textContent='空';
+    el.appendChild(e);
+  }
+}
+
+function selectCard(id, cards){
+  if(!cards.find(c=>c.id===id)) return;
+  selectedCardId = (selectedCardId===id) ? null : id;
+  renderMyHand(cards);
+  // 重新渲染桌面高亮
+  if(currentView){
+    renderPile(0, currentView.piles[0]);
+    renderPile(1, currentView.piles[1]);
+  }
+}
+
+function onPileClick(pileIndex){
+  if(!selectedCardId||!socket) return;
+  socket.emit('speed:playCard', { cardId: selectedCardId, pileIndex });
+  selectedCardId = null;
+}
+window.onPileClick = onPileClick;
+
+// ── Socket ──
+function getSocket(){
+  if(socket) return socket;
+  socket = io();
+
+  socket.on('speed:roomCreated', code=>{
+    document.getElementById('lobbyStatus').innerHTML =
+      '房间已创建：<span class="room-code">'+code+'</span><br><span class="small">等待对方加入...</span>';
+  });
+
+  socket.on('speed:joinFailed', msg=>{
+    document.getElementById('lobbyStatus').textContent='加入失败：'+msg;
+  });
+
+  socket.on('speed:roomReady', ()=>{
+    document.getElementById('lobbyStatus').textContent='对方已加入，开局！';
+  });
+
+  socket.on('speed:gameStart', data=>{
+    myIndex = data.yourIndex;
+    selectedCardId = null;
+    document.getElementById('lobbyPanel').classList.add('hidden');
+    document.getElementById('gameArea').classList.remove('hidden');
+    document.getElementById('resultPanel').classList.add('hidden');
+    document.getElementById('passBtn').disabled = false;
+    render(data.view);
+  });
+
+  socket.on('speed:stateUpdate', view=>{
+    render(view);
+  });
+
+  socket.on('speed:playFailed', reason=>{
+    // 出牌被抢先，取消选中
+    selectedCardId = null;
+    if(currentView){
+      renderMyHand(currentView.you.hand);
+      renderPile(0, currentView.piles[0]);
+      renderPile(1, currentView.piles[1]);
+    }
+    // 短暂提示
+    const s=document.getElementById('gameStatus');
+    const prev=s.textContent;
+    s.textContent = reason==='notAdjacent'?'不相邻，不能出！':'被抢先了！';
+    setTimeout(()=>{ if(currentView) render(currentView); }, 1000);
+  });
+
+  socket.on('speed:gameOver', data=>{
+    const won = data.winner===myIndex;
+    const msg = document.getElementById('resultMsg');
+    msg.className = won?'winner-text':'loser-text';
+    msg.textContent = won?'🎉 你赢了！':'💀 对手赢了。';
+    document.getElementById('resultPanel').classList.remove('hidden');
+    document.getElementById('passBtn').disabled = true;
+  });
+
+  socket.on('speed:opponentLeft', ()=>{
+    document.getElementById('gameStatus').textContent='对手已离开。';
+    document.getElementById('passBtn').disabled=true;
+  });
+
+  return socket;
+}
+
+function exitGame(){
+  if(socket){ socket.disconnect(); socket=null; }
+  location.href='/';
+}
+
+document.getElementById('hostBtn').addEventListener('click', ()=>getSocket().emit('speed:createRoom'));
+document.getElementById('joinBtn').addEventListener('click', ()=>{
+  getSocket().emit('speed:joinRoom', document.getElementById('roomInput').value);
+});
+document.getElementById('passBtn').addEventListener('click', ()=>socket&&socket.emit('speed:pass'));
+document.getElementById('exitBtn').addEventListener('click', exitGame);
+document.getElementById('exitBtn2').addEventListener('click', exitGame);
+document.getElementById('restartBtn').addEventListener('click', ()=>socket&&socket.emit('speed:restart'));
+})();
+</script>
+</body>
+</html>

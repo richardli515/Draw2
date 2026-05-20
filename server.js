@@ -2,166 +2,202 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const GameCore = require("./gameCore");
+const SpeedCore = require("./speedCore");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
-
 app.use(express.static("."));
 
-// rooms[code] = {
-//   code, players: [{socketId, index}], state, startingPlayer
-// }
+// ─── Draw2 房间 ───────────────────────────────────────────────
 const rooms = {};
-
-// socketId -> { roomCode, playerIndex }
 const socketRoom = {};
 
-function makeRoomCode() {
+function makeCode(existing) {
   let code;
-  do {
-    code = Math.random().toString(36).substring(2, 6).toUpperCase();
-  } while (rooms[code]);
+  do { code = Math.random().toString(36).substring(2, 6).toUpperCase(); }
+  while (existing[code]);
   return code;
 }
 
-function sendStateToRoom(room) {
+function sendDraw2State(room) {
   if (!room.state) return;
   for (const p of room.players) {
-    const view = GameCore.viewForPlayer(room.state, p.index);
-    io.to(p.socketId).emit("stateUpdate", view);
+    io.to(p.socketId).emit("stateUpdate", GameCore.viewForPlayer(room.state, p.index));
   }
 }
 
-function startNewGame(room) {
-  // 每局轮流先手；第一局随机
-  let firstPlayer;
-  if (typeof room.startingPlayer !== 'number') {
-    firstPlayer = Math.floor(Math.random() * 2);
-  } else {
-    firstPlayer = 1 - room.startingPlayer;
-  }
-  room.startingPlayer = firstPlayer;
-  room.state = GameCore.newGame(firstPlayer);
+function startDraw2Game(room) {
+  let first = typeof room.startingPlayer !== 'number'
+    ? Math.floor(Math.random() * 2)
+    : 1 - room.startingPlayer;
+  room.startingPlayer = first;
+  room.state = GameCore.newGame(first);
+  for (const p of room.players)
+    io.to(p.socketId).emit("gameStart", { yourIndex: p.index, firstPlayer: first });
+  sendDraw2State(room);
+}
+
+// ─── Speed 房间 ───────────────────────────────────────────────
+const speedRooms = {};
+const socketSpeedRoom = {};
+
+function sendSpeedState(room) {
+  if (!room.state) return;
+  for (const p of room.players)
+    io.to(p.socketId).emit("speed:stateUpdate", SpeedCore.viewForPlayer(room.state, p.index));
+}
+
+function startSpeedGame(room) {
+  room.state = SpeedCore.newGame();
   for (const p of room.players) {
-    io.to(p.socketId).emit("gameStart", { yourIndex: p.index, firstPlayer });
+    io.to(p.socketId).emit("speed:gameStart", {
+      yourIndex: p.index,
+      view: SpeedCore.viewForPlayer(room.state, p.index)
+    });
   }
-  sendStateToRoom(room);
 }
 
+// ─── Socket 事件 ─────────────────────────────────────────────
 io.on("connection", (socket) => {
 
+  // ── Draw2 ──
   socket.on("createRoom", () => {
-    const roomCode = makeRoomCode();
-    rooms[roomCode] = {
-      code: roomCode,
-      players: [{ socketId: socket.id, index: 0 }],
-      state: null,
-      startingPlayer: undefined
-    };
-    socketRoom[socket.id] = { roomCode, playerIndex: 0 };
-    socket.join(roomCode);
-    socket.emit("roomCreated", roomCode);
+    const code = makeCode(rooms);
+    rooms[code] = { code, players: [{ socketId: socket.id, index: 0 }], state: null, startingPlayer: undefined };
+    socketRoom[socket.id] = { roomCode: code, playerIndex: 0 };
+    socket.join(code);
+    socket.emit("roomCreated", code);
   });
 
   socket.on("joinRoom", (roomCode) => {
     roomCode = String(roomCode || "").toUpperCase().trim();
     const room = rooms[roomCode];
-
-    if (!room) {
-      socket.emit("joinFailed", "房间不存在");
-      return;
-    }
-
-    if (room.players.length >= 2) {
-      socket.emit("joinFailed", "房间已满");
-      return;
-    }
-
-    if (room.players.some((p) => p.socketId === socket.id)) {
-      socket.emit("joinFailed", "不能加入自己创建的房间");
-      return;
-    }
-
+    if (!room) { socket.emit("joinFailed", "房间不存在"); return; }
+    if (room.players.length >= 2) { socket.emit("joinFailed", "房间已满"); return; }
+    if (room.players.some(p => p.socketId === socket.id)) { socket.emit("joinFailed", "不能加入自己创建的房间"); return; }
     room.players.push({ socketId: socket.id, index: 1 });
     socketRoom[socket.id] = { roomCode, playerIndex: 1 };
     socket.join(roomCode);
-
-    // 通知房间双方已就绪
     io.to(roomCode).emit("roomReady", roomCode);
-
-    // 自动开局
-    startNewGame(room);
+    startDraw2Game(room);
   });
 
-  // 客户端请求出牌
   socket.on("playCards", (payload) => {
     const link = socketRoom[socket.id];
     if (!link) return;
     const room = rooms[link.roomCode];
     if (!room || !room.state) return;
-
     const result = GameCore.validatePlay(room.state, link.playerIndex, payload && payload.cardIds);
-    if (!result.ok) {
-      socket.emit("actionError", result.reason);
-      return;
-    }
+    if (!result.ok) { socket.emit("actionError", result.reason); return; }
     GameCore.applyPlay(room.state, link.playerIndex, result.cards);
-    sendStateToRoom(room);
+    sendDraw2State(room);
   });
 
-  // 客户端请求 pass
   socket.on("passTurn", () => {
     const link = socketRoom[socket.id];
     if (!link) return;
     const room = rooms[link.roomCode];
     if (!room || !room.state) return;
-
     const result = GameCore.validatePass(room.state, link.playerIndex);
-    if (!result.ok) {
-      socket.emit("actionError", result.reason);
-      return;
-    }
+    if (!result.ok) { socket.emit("actionError", result.reason); return; }
     GameCore.applyPass(room.state, link.playerIndex);
-    sendStateToRoom(room);
+    sendDraw2State(room);
   });
 
-  // 再来一局
   socket.on("requestRestart", () => {
     const link = socketRoom[socket.id];
     if (!link) return;
     const room = rooms[link.roomCode];
-    if (!room) return;
-    if (!room.state || !room.state.gameOver) {
-      socket.emit("actionError", "gameNotOver");
-      return;
-    }
-    if (room.players.length < 2) {
-      socket.emit("actionError", "opponentLeft");
-      return;
-    }
-    startNewGame(room);
+    if (!room || !room.state || !room.state.gameOver) { socket.emit("actionError", "gameNotOver"); return; }
+    if (room.players.length < 2) { socket.emit("actionError", "opponentLeft"); return; }
+    startDraw2Game(room);
   });
 
+  // ── Speed ──
+  socket.on("speed:createRoom", () => {
+    const code = makeCode(speedRooms);
+    speedRooms[code] = { code, players: [{ socketId: socket.id, index: 0 }], state: null };
+    socketSpeedRoom[socket.id] = { roomCode: code, playerIndex: 0 };
+    socket.join("speed:" + code);
+    socket.emit("speed:roomCreated", code);
+  });
+
+  socket.on("speed:joinRoom", (roomCode) => {
+    roomCode = String(roomCode || "").toUpperCase().trim();
+    const room = speedRooms[roomCode];
+    if (!room) { socket.emit("speed:joinFailed", "房间不存在"); return; }
+    if (room.players.length >= 2) { socket.emit("speed:joinFailed", "房间已满"); return; }
+    if (room.players.some(p => p.socketId === socket.id)) { socket.emit("speed:joinFailed", "不能加入自己创建的房间"); return; }
+    room.players.push({ socketId: socket.id, index: 1 });
+    socketSpeedRoom[socket.id] = { roomCode, playerIndex: 1 };
+    socket.join("speed:" + roomCode);
+    io.to("speed:" + roomCode).emit("speed:roomReady");
+    startSpeedGame(room);
+  });
+
+  socket.on("speed:playCard", (payload) => {
+    const link = socketSpeedRoom[socket.id];
+    if (!link) return;
+    const room = speedRooms[link.roomCode];
+    if (!room || !room.state || room.state.gameOver) return;
+    const { cardId, pileIndex } = payload || {};
+    const result = SpeedCore.playCard(room.state, link.playerIndex, cardId, pileIndex);
+    if (!result.ok) { socket.emit("speed:playFailed", result.reason); return; }
+    if (room.state.gameOver) {
+      for (const p of room.players)
+        io.to(p.socketId).emit("speed:gameOver", { winner: room.state.winner });
+    }
+    sendSpeedState(room);
+  });
+
+  socket.on("speed:pass", () => {
+    const link = socketSpeedRoom[socket.id];
+    if (!link) return;
+    const room = speedRooms[link.roomCode];
+    if (!room || !room.state || room.state.gameOver) return;
+    SpeedCore.pass(room.state, link.playerIndex);
+    if (room.state.gameOver) {
+      for (const p of room.players)
+        io.to(p.socketId).emit("speed:gameOver", { winner: room.state.winner });
+    }
+    sendSpeedState(room);
+  });
+
+  socket.on("speed:restart", () => {
+    const link = socketSpeedRoom[socket.id];
+    if (!link) return;
+    const room = speedRooms[link.roomCode];
+    if (!room || !room.state || !room.state.gameOver) return;
+    if (room.players.length < 2) { socket.emit("speed:joinFailed", "对手已离开"); return; }
+    startSpeedGame(room);
+  });
+
+  // ── 断线清理 ──
   socket.on("disconnect", () => {
     const link = socketRoom[socket.id];
     if (link) {
       const room = rooms[link.roomCode];
       if (room) {
-        room.players = room.players.filter((p) => p.socketId !== socket.id);
-        if (room.players.length === 0) {
-          delete rooms[link.roomCode];
-        } else {
-          io.to(link.roomCode).emit("opponentLeft");
-        }
+        room.players = room.players.filter(p => p.socketId !== socket.id);
+        if (room.players.length === 0) delete rooms[link.roomCode];
+        else io.to(link.roomCode).emit("opponentLeft");
       }
       delete socketRoom[socket.id];
+    }
+    const slink = socketSpeedRoom[socket.id];
+    if (slink) {
+      const room = speedRooms[slink.roomCode];
+      if (room) {
+        room.players = room.players.filter(p => p.socketId !== socket.id);
+        if (room.players.length === 0) delete speedRooms[slink.roomCode];
+        else io.to("speed:" + slink.roomCode).emit("speed:opponentLeft");
+      }
+      delete socketSpeedRoom[socket.id];
     }
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Draw2 server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Draw2+Speed server running on port ${PORT}`));
