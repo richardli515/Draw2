@@ -122,13 +122,13 @@
   }
 
   // 执行一手出牌。state 会被改变。返回执行的 cards。
+  // 注意：出牌后不立即补牌，补牌只在对方 pass 之后发生。
   function applyPlay(state, playerIndex, cards) {
     const p = state.players[playerIndex];
     p.hand = p.hand.filter(c => !cards.some(x => x.id === c.id));
     p.pile.push(...cards);
     state.lastPlay = { playerIndex, cards };
     state.lastWinner = playerIndex;
-    drawToTwo(p, state.deck);
     checkEnd(state, playerIndex);
     if (!state.gameOver) {
       state.currentPlayer = 1 - playerIndex;
