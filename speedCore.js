@@ -16,16 +16,17 @@
   }
 
   function shuffle(d) {
-    for (let i = d.length - 1; i > 0; i--) {
+    const a = d.slice();
+    for (let i = a.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [d[i], d[j]] = [d[j], d[i]];
+      [a[i], a[j]] = [a[j], a[i]];
     }
-    return d;
+    return a;
   }
 
-  // A 可接 K 或 2，循环
   function rankIndex(r) { return RANKS.indexOf(r); }
 
+  // K→A→2→3 完全循环，±1 相邻
   function adjacent(a, b) {
     if (a === null || b === null) return false;
     const ai = rankIndex(typeof a === 'string' ? a : a.rank);
@@ -35,9 +36,12 @@
     return diff === 1 || diff === RANKS.length - 1;
   }
 
-  // 创建新游戏 state
-  // 每人：15张牌堆 + 5张手牌
-  // 桌面：各1张明牌（从剩余牌堆翻出）
+  // state 结构：
+  //   players[i].drawPile  — 翻牌牌堆
+  //   players[i].hand      — 手牌（最多5张）
+  //   piles[i]             — 桌面堆顶牌（null=空）
+  //   pileStacks[i]        — 桌面堆顶牌下面的历史牌（底部在index 0）
+  //   passFlags[i]         — 是否已 pass
   function newGame() {
     const deck = createDeck(); // 52张
     const state = {
@@ -45,25 +49,22 @@
         { drawPile: [], hand: [] },
         { drawPile: [], hand: [] }
       ],
-      piles: [null, null],   // 桌面两堆顶牌
+      piles: [null, null],
+      pileStacks: [[], []],   // 桌面每堆的历史牌（不含顶牌）
       passFlags: [false, false],
       gameOver: false,
       winner: null
     };
 
-    // 分配：p0 拿 15 张牌堆，p1 拿 15 张牌堆
     state.players[0].drawPile = deck.splice(0, 15);
     state.players[1].drawPile = deck.splice(0, 15);
-
-    // 各摸 5 张手牌
     drawUpToFive(state.players[0]);
     drawUpToFive(state.players[1]);
 
-    // 剩余 52-30-10 = 12 张，取两张作桌面初始牌
+    // 剩余 12 张，取两张作桌面初始明牌
     state.piles[0] = deck.splice(0, 1)[0] || null;
     state.piles[1] = deck.splice(0, 1)[0] || null;
-
-    // 剩余牌不用（标准 Speed 用完了52张）
+    // 剩余 10 张丢弃（标准 Speed 规则）
     return state;
   }
 
@@ -73,7 +74,7 @@
     }
   }
 
-  // 验证并执行出牌。返回 {ok, reason}
+  // 出牌。返回 {ok, reason}
   function playCard(state, playerIndex, cardId, pileIndex) {
     if (state.gameOver) return { ok: false, reason: 'gameOver' };
     if (pileIndex !== 0 && pileIndex !== 1) return { ok: false, reason: 'invalid' };
@@ -85,29 +86,27 @@
     const card = p.hand[cardIdx];
     const topCard = state.piles[pileIndex];
 
-    // 桌面堆为空或相邻才能放
     if (topCard !== null && !adjacent(card.rank, topCard.rank)) {
       return { ok: false, reason: 'notAdjacent' };
     }
 
-    // 执行：移除手牌，更新桌面，补牌，清 pass 标记
+    // 旧顶牌压入历史
+    if (topCard !== null) state.pileStacks[pileIndex].push(topCard);
     p.hand.splice(cardIdx, 1);
     state.piles[pileIndex] = card;
-    state.passFlags[playerIndex] = false;
-    state.passFlags[1 - playerIndex] = false; // 任何人出牌都重置双方 pass
+    // 任何人出牌都重置双方 pass
+    state.passFlags[0] = false;
+    state.passFlags[1] = false;
     drawUpToFive(p);
-
-    // 检查胜利：手牌和牌堆都空
     checkWin(state);
     return { ok: true };
   }
 
-  // 手动 pass
+  // Pass。返回 {ok, reason}
   function pass(state, playerIndex) {
     if (state.gameOver) return { ok: false, reason: 'gameOver' };
     state.passFlags[playerIndex] = true;
 
-    // 双方都 pass → 翻新牌到桌面
     if (state.passFlags[0] && state.passFlags[1]) {
       flipNewCards(state);
       state.passFlags = [false, false];
@@ -115,12 +114,38 @@
     return { ok: true };
   }
 
-  // 双方都 pass 时，从各自牌堆顶翻一张到桌面
+  // 双方都 pass 时翻新牌。
+  // 优先从各自 drawPile 翻；若 drawPile 都空，则把桌面两堆（含顶牌）收集、洗牌、平分成新 drawPile，再各翻一张。
   function flipNewCards(state) {
+    const p0Empty = state.players[0].drawPile.length === 0;
+    const p1Empty = state.players[1].drawPile.length === 0;
+
+    if (p0Empty && p1Empty) {
+      // 收集桌面所有牌（含顶牌 + 历史牌）
+      const collected = [];
+      for (let i = 0; i < 2; i++) {
+        if (state.piles[i]) collected.push(state.piles[i]);
+        collected.push(...state.pileStacks[i]);
+        state.piles[i] = null;
+        state.pileStacks[i] = [];
+      }
+      if (collected.length === 0) {
+        // 无牌可翻，游戏卡死，平局
+        state.gameOver = true;
+        state.winner = -1;
+        return;
+      }
+      const shuffled = shuffle(collected);
+      const half = Math.floor(shuffled.length / 2);
+      state.players[0].drawPile = shuffled.slice(0, half);
+      state.players[1].drawPile = shuffled.slice(half);
+    }
+
+    // 各从 drawPile 翻一张到桌面
     for (let i = 0; i < 2; i++) {
-      // 优先从 p0/p1 牌堆各取一张
       const src = state.players[i].drawPile;
       if (src.length > 0) {
+        if (state.piles[i] !== null) state.pileStacks[i].push(state.piles[i]);
         state.piles[i] = src.shift();
         drawUpToFive(state.players[i]);
       }
@@ -139,7 +164,6 @@
     }
   }
 
-  // 给某玩家的视图（隐藏对手手牌）
   function viewForPlayer(state, viewerIndex) {
     const other = 1 - viewerIndex;
     return {
@@ -160,5 +184,5 @@
     };
   }
 
-  return { RANKS, SUITS, createDeck, shuffle, adjacent, rankIndex, newGame, playCard, pass, drawUpToFive, viewForPlayer };
+  return { RANKS, SUITS, createDeck, shuffle, adjacent, rankIndex, newGame, playCard, pass, drawUpToFive, checkWin, viewForPlayer };
 });
