@@ -45,7 +45,7 @@
     </div>
     <p class="small" data-i18n="modeHint">单机模式对战电脑；联机模式两人对战。</p>
     <div style="border-top:1px solid #334155;margin:12px 0 10px"></div>
-    <p class="small" style="margin:0 0 10px;color:#64748b">其他游戏</p>
+    <p class="small" id="otherGamesLabel" style="margin:0 0 10px;color:#64748b">其他游戏</p>
     <div class="row" style="min-height:auto">
       <a href="/speed.html" style="text-decoration:none">
         <button id="speedBtn" style="background:#7c3aed">⚡ Speed</button>
@@ -99,6 +99,7 @@
 const I18N={
  zh:{
   chooseMode:'选择模式', solo:'单机模式', online:'联机模式', back:'返回', exit:'退出', modeHint:'单机模式对战电脑；联机模式两人对战。',
+  otherGames:'其他游戏', roomCodePlaceholder:'房间码', pageTitle:'起两张',
   onlineTitle:'联机大厅', onlineHint:'创建房间后把房间码发给朋友，对方输入房间码即可开局。',
   host:'创建房间', join:'加入房间',
   yourPile:'你的出牌堆', aiPile:'电脑出牌堆', oppPile:'对手出牌堆', drawPile:'起牌牌堆', table:'桌面', computer:'电脑', opponent:'对手', you:'你', play:'出牌', restart:'重新开始',
@@ -112,6 +113,7 @@ const I18N={
  },
  en:{
   chooseMode:'Choose Mode', solo:'Solo Mode', online:'Online Mode', back:'Back', exit:'Exit', modeHint:'Solo plays vs computer. Online is two-player.',
+  otherGames:'More Games', roomCodePlaceholder:'Room Code', pageTitle:'Draw2',
   onlineTitle:'Online Lobby', onlineHint:'Create a room and share the code, or enter a friend\'s code to join.',
   host:'Create Room', join:'Join Room',
   yourPile:'Your pile', aiPile:'Computer pile', oppPile:'Opponent pile', drawPile:'Draw pile', table:'Table', computer:'Computer', opponent:'Opponent', you:'You', play:'Play', restart:'Restart',
@@ -150,9 +152,12 @@ function red(c){return c.suit==='♥'||c.suit==='♦'}
 
 function applyLang(){
   document.documentElement.lang=lang==='zh'?'zh-CN':'en';
+  document.title=tr('pageTitle');
   document.getElementById('langBtn').textContent=lang==='zh'?'EN':'中文';
   document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=tr(el.dataset.i18n)});
   document.getElementById('ruleHint').innerHTML=tr('rule');
+  document.getElementById('otherGamesLabel').textContent=tr('otherGames');
+  document.getElementById('roomInput').placeholder=tr('roomCodePlaceholder');
   // 联机模式下对手标签改成"对手"
   if(mode==='online'){
     document.getElementById('opponentLabel').textContent=tr('opponent');
