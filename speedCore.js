@@ -46,31 +46,39 @@
     const deck = createDeck(); // 52张
     const state = {
       players: [
-        { drawPile: [], hand: [] },
-        { drawPile: [], hand: [] }
+        { handPile: [], hand: [], drawPile: [] },
+        { handPile: [], hand: [], drawPile: [] }
       ],
       piles: [null, null],
-      pileStacks: [[], []],   // 桌面每堆的历史牌（不含顶牌）
+      pileStacks: [[], []],
       passFlags: [false, false],
       gameOver: false,
       winner: null
     };
 
-    state.players[0].drawPile = deck.splice(0, 15);
-    state.players[1].drawPile = deck.splice(0, 15);
+    // 每人 15 张补手牌堆
+    state.players[0].handPile = deck.splice(0, 15);
+    state.players[1].handPile = deck.splice(0, 15);
+    // 各摸 5 张初始手牌（从 handPile）
     drawUpToFive(state.players[0]);
     drawUpToFive(state.players[1]);
 
-    // 剩余 12 张，取两张作桌面初始明牌
+    // 桌面初始明牌 2 张
     state.piles[0] = deck.splice(0, 1)[0] || null;
     state.piles[1] = deck.splice(0, 1)[0] || null;
-    // 剩余 10 张丢弃（标准 Speed 规则）
+
+    // 剩余 20 张：各 5 张作翻牌牌堆，剩余 10 张补进 handPile
+    state.players[0].drawPile = deck.splice(0, 5);
+    state.players[1].drawPile = deck.splice(0, 5);
+    state.players[0].handPile.push(...deck.splice(0, 5));
+    state.players[1].handPile.push(...deck.splice(0, 5));
     return state;
   }
 
+  // 从 handPile 补手牌到 5 张
   function drawUpToFive(player) {
-    while (player.hand.length < 5 && player.drawPile.length > 0) {
-      player.hand.push(player.drawPile.shift());
+    while (player.hand.length < 5 && player.handPile.length > 0) {
+      player.hand.push(player.handPile.shift());
     }
   }
 
@@ -147,7 +155,6 @@
       if (src.length > 0) {
         if (state.piles[i] !== null) state.pileStacks[i].push(state.piles[i]);
         state.piles[i] = src.shift();
-        drawUpToFive(state.players[i]);
       }
     }
     checkWin(state);
@@ -156,7 +163,8 @@
   function checkWin(state) {
     for (let i = 0; i < 2; i++) {
       const p = state.players[i];
-      if (p.hand.length === 0 && p.drawPile.length === 0) {
+      // 手牌和补手牌堆都空才算赢
+      if (p.hand.length === 0 && p.handPile.length === 0) {
         state.gameOver = true;
         state.winner = i;
         return;
@@ -174,12 +182,14 @@
       you: {
         index: viewerIndex,
         hand: state.players[viewerIndex].hand,
-        deckCount: state.players[viewerIndex].drawPile.length
+        handPileCount: state.players[viewerIndex].handPile.length,
+        flipPileCount: state.players[viewerIndex].drawPile.length
       },
       opponent: {
         index: other,
         handCount: state.players[other].hand.length,
-        deckCount: state.players[other].drawPile.length
+        handPileCount: state.players[other].handPile.length,
+        flipPileCount: state.players[other].drawPile.length
       }
     };
   }
