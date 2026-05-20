@@ -21,7 +21,7 @@
     .status{font-size:17px;font-weight:800;color:#facc15;line-height:1.5}.hint,.small{color:#cbd5e1;line-height:1.5;font-size:14px}.small{color:#94a3b8}.active{border-color:#facc15}.winner{font-size:22px;font-weight:900;color:#22c55e}
     .score{display:flex;gap:12px;flex-wrap:wrap}.scorebox{background:#020617;border:1px solid #334155;padding:10px 12px;border-radius:10px;min-width:120px}
     code{background:#020617;padding:2px 5px;border-radius:5px}.restart-row{min-height:auto;margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,.18)}
-    .room-code{font-size:26px;font-weight:900;letter-spacing:4px;color:#22c55e}
+    .room-code{font-size:26px;font-weight:900;letter-spacing:4px;color:#22c55e}.hidden{display:none}
   </style>
 </head>
 <body>
@@ -29,42 +29,52 @@
   <div class="top">
     <div>
       <h1>起两张</h1>
-      <div class="subtitle">draw2 · p2p battle · github pages</div>
+      <div class="subtitle">draw2 · solo / p2p battle</div>
     </div>
     <button id="langBtn" class="lang">EN</button>
   </div>
 
-  <div class="panel" id="lobbyPanel">
+  <div class="panel" id="modePanel">
+    <h2 data-i18n="chooseMode">选择模式</h2>
+    <div class="row" style="min-height:auto">
+      <button id="soloBtn" data-i18n="solo">单机模式</button>
+      <button id="onlineBtn" class="secondary" data-i18n="online">联机模式</button>
+    </div>
+    <p class="small" data-i18n="modeHint">单机模式对战电脑；联机模式用房间码与朋友 P2P 对战。</p>
+  </div>
+
+  <div class="panel hidden" id="lobbyPanel">
     <h2 data-i18n="p2pTitle">P2P 对战</h2>
     <div class="hint" id="p2pHint"></div>
     <div class="row" style="min-height:auto">
       <button id="hostBtn" data-i18n="host">创建房间</button>
       <input id="joinInput" maxlength="6" placeholder="房间码" />
       <button id="joinBtn" class="secondary" data-i18n="join">加入房间</button>
+      <button id="backBtn" class="secondary" data-i18n="back">返回</button>
     </div>
     <div class="small" id="roomLine"></div>
   </div>
 
-  <div class="panel">
+  <div class="panel hidden" id="gamePanel">
     <div class="status" id="status">加载中...</div>
     <div class="score">
       <div class="scorebox"><span data-i18n="yourPile">你的出牌堆</span>：<b id="myScore">0</b></div>
-      <div class="scorebox"><span data-i18n="opPile">对方出牌堆</span>：<b id="opScore">0</b></div>
+      <div class="scorebox"><span id="opPileLabel" data-i18n="opPile">对方出牌堆</span>：<b id="opScore">0</b></div>
       <div class="scorebox"><span data-i18n="drawPile">起牌牌堆</span>：<b id="deckInfo">0</b></div>
     </div>
     <div class="hint" id="ruleHint"></div>
   </div>
 
-  <div class="panel" id="opPanel"><h2 data-i18n="opponent">对方</h2><div class="row" id="opCards"></div></div>
-  <div class="panel"><h2 data-i18n="table">桌面</h2><div class="row" id="tableCards"></div><div class="small" id="tableInfo"></div></div>
-  <div class="panel" id="myPanel"><h2 data-i18n="you">你</h2><div class="row" id="myCards"></div></div>
+  <div class="panel hidden" id="opPanel"><h2 id="opTitle" data-i18n="opponent">对方</h2><div class="row" id="opCards"></div></div>
+  <div class="panel hidden" id="tablePanel"><h2 data-i18n="table">桌面</h2><div class="row" id="tableCards"></div><div class="small" id="tableInfo"></div></div>
+  <div class="panel hidden" id="myPanel"><h2 data-i18n="you">你</h2><div class="row" id="myCards"></div></div>
 
-  <div class="panel">
+  <div class="panel hidden" id="controlPanel">
     <div class="row" style="min-height:auto">
       <button id="playBtn" data-i18n="play">出牌</button>
       <button id="passBtn" class="secondary">Pass</button>
     </div>
-    <p class="small" data-i18n="instruction">点击你的 1 或 2 张牌，然后点「出牌」。</p>
+    <p class="small" id="instructionLine" data-i18n="instruction">点击你的 1 或 2 张牌，然后点「出牌」。</p>
     <div class="row restart-row">
       <button id="resetBtn" class="danger" data-i18n="restart">重新开始</button>
     </div>
@@ -75,28 +85,34 @@
 (function(){
 const I18N={
  zh:{
-  p2pTitle:'P2P 对战', host:'创建房间', join:'加入房间', yourPile:'你的出牌堆', opPile:'对方出牌堆', drawPile:'起牌牌堆', opponent:'对方', table:'桌面', you:'你', play:'出牌', restart:'重新开始',
-  p2pHint:'不需要服务器。房主创建房间后，把房间码发给朋友；对方输入房间码即可加入。',
+  chooseMode:'选择模式', solo:'单机模式', online:'联机模式', back:'返回', modeHint:'单机模式对战电脑；联机模式用房间码与朋友 P2P 对战。',
+  p2pTitle:'P2P 对战', host:'创建房间', join:'加入房间', yourPile:'你的出牌堆', opPile:'对方出牌堆', aiPile:'电脑出牌堆', drawPile:'起牌牌堆', opponent:'对方', computer:'电脑', table:'桌面', you:'你', play:'出牌', restart:'重新开始',
+  p2pHint:'不需要 Render，也不需要 npm start。房主创建房间后，把房间码发给朋友；对方输入房间码即可加入。',
   rule:'计分规则：每次出的牌进入自己的出牌堆。起牌牌堆空后，不再补牌。先出完手牌的一方，把对方剩余手牌也收入自己的出牌堆。最后比较出牌堆数量，多者获胜。<br>牌型：单张、对子、两张顺子、王炸。顺子只允许 <code>34</code> 到 <code>KA</code>。小王+大王为王炸，可压任意牌型。',
   instruction:'点击你的 1 或 2 张牌，然后点「出牌」。',
+  soloInstruction:'点击你的 1 或 2 张牌，然后点「出牌」。电脑会自动行动。',
   loading:'加载中...', ready:'准备好了。创建或加入房间。', creating:'正在创建房间...', joining:'正在加入房间...', waiting:'等待对方加入。房间码：', connected:'已连接。', current:'当前回合', emptyTable:'空桌。当前玩家可以任意合法出牌。', lastPlay:'上一手',
   select:'请先点选要出的牌。', notTurn:'还没轮到你。', invalid:'非法牌型。', cannotBeat:'压不上。请出更大的同类型牌、王炸，或者 Pass。', emptyPass:'空桌不能 Pass，必须出牌。', disconnected:'连接已断开。',
-  first:'房主先手。', youWin:'你获胜！', opWin:'对方获胜。', tie:'平局', gameEnd:'游戏结束', cards:'张',
+  first:'房主先手。', soloFirst:'你先手。', youWin:'你获胜！', opWin:'对方获胜。', aiWin:'电脑获胜。', tie:'平局', gameEnd:'游戏结束', cards:'张',
+  youPlayed:'你出了', aiPlayed:'电脑出了', opPlayed:'对方出了',
   types:{single:'单张',pair:'对子',straight:'顺子',kingbomb:'王炸'}
  },
  en:{
-  p2pTitle:'P2P Battle', host:'Create Room', join:'Join Room', yourPile:'Your pile', opPile:'Opponent pile', drawPile:'Draw pile', opponent:'Opponent', table:'Table', you:'You', play:'Play', restart:'Restart',
-  p2pHint:'No server needed. The host creates a room and shares the room code. The other player enters the code to join.',
+  chooseMode:'Choose Mode', solo:'Solo Mode', online:'Online Mode', back:'Back', modeHint:'Solo mode plays against the computer. Online mode uses a room code for P2P battle.',
+  p2pTitle:'P2P Battle', host:'Create Room', join:'Join Room', yourPile:'Your pile', opPile:'Opponent pile', aiPile:'Computer pile', drawPile:'Draw pile', opponent:'Opponent', computer:'Computer', table:'Table', you:'You', play:'Play', restart:'Restart',
+  p2pHint:'No Render and no npm start needed. The host creates a room and shares the room code. The other player enters the code to join.',
   rule:'Scoring: every played card goes into your own pile. When the draw pile is empty, no more cards are drawn. The first player to empty their hand takes the opponent’s remaining hand into their pile. Higher pile count wins.<br>Hands: single, pair, two-card straight, Joker Bomb. Straights only run from <code>34</code> to <code>KA</code>. Small Joker + Big Joker is Joker Bomb and beats any hand type.',
   instruction:'Select 1 or 2 cards, then tap Play.',
+  soloInstruction:'Select 1 or 2 cards, then tap Play. The computer moves automatically.',
   loading:'Loading...', ready:'Ready. Create or join a room.', creating:'Creating room...', joining:'Joining room...', waiting:'Waiting for opponent. Room code: ', connected:'Connected.', current:'Current turn', emptyTable:'Empty table. Current player may play any legal hand.', lastPlay:'Last play',
   select:'Select cards first.', notTurn:'Not your turn.', invalid:'Invalid hand.', cannotBeat:'Cannot beat it. Play a higher same-type hand, Joker Bomb, or Pass.', emptyPass:'Cannot Pass on an empty table. You must play.', disconnected:'Disconnected.',
-  first:'Host goes first.', youWin:'You win!', opWin:'Opponent wins.', tie:'Tie', gameEnd:'Game over', cards:'cards',
+  first:'Host goes first.', soloFirst:'You go first.', youWin:'You win!', opWin:'Opponent wins.', aiWin:'Computer wins.', tie:'Tie', gameEnd:'Game over', cards:'cards',
+  youPlayed:'You played', aiPlayed:'Computer played', opPlayed:'Opponent played',
   types:{single:'single',pair:'pair',straight:'straight',kingbomb:'Joker Bomb'}
  }
 };
 
-let lang='zh';
+let lang='zh', mode=null;
 let peer=null, conn=null, isHost=false, playerIndex=null, game=null, selectedIds=[];
 const RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A','2','小王','大王'];
 const STRAIGHT_RANKS=['3','4','5','6','7','8','9','10','J','Q','K','A'];
@@ -111,10 +127,38 @@ function applyLang(){
  document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=tr(el.dataset.i18n)});
  document.getElementById('ruleHint').innerHTML=tr('rule');
  document.getElementById('p2pHint').textContent=tr('p2pHint');
+ document.getElementById('opPileLabel').textContent=mode==='solo'?tr('aiPile'):tr('opPile');
+ document.getElementById('opTitle').textContent=mode==='solo'?tr('computer'):tr('opponent');
+ document.getElementById('instructionLine').textContent=mode==='solo'?tr('soloInstruction'):tr('instruction');
  render();
+}
+function showGamePanels(){
+ ['gamePanel','opPanel','tablePanel','myPanel','controlPanel'].forEach(id=>document.getElementById(id).classList.remove('hidden'));
+}
+function showMode(){
+ mode=null;
+ document.getElementById('modePanel').classList.remove('hidden');
+ document.getElementById('lobbyPanel').classList.add('hidden');
+ ['gamePanel','opPanel','tablePanel','myPanel','controlPanel'].forEach(id=>document.getElementById(id).classList.add('hidden'));
 }
 function setStatus(s){document.getElementById('status').textContent=s}
 function makeCode(){return 'D2' + Math.floor(1000 + Math.random()*9000)}
+
+function startSolo(){
+ mode='solo'; isHost=true; playerIndex=0; game=newGame(tr('soloFirst'));
+ document.getElementById('modePanel').classList.add('hidden');
+ document.getElementById('lobbyPanel').classList.add('hidden');
+ showGamePanels();
+ applyLang();
+ render();
+}
+function chooseOnline(){
+ mode='online';
+ document.getElementById('modePanel').classList.add('hidden');
+ document.getElementById('lobbyPanel').classList.remove('hidden');
+ setStatus(tr('ready'));
+ applyLang();
+}
 function send(msg){if(conn&&conn.open)conn.send(msg)}
 function hostRoom(){
  setStatus(tr('creating'));
@@ -123,15 +167,15 @@ function hostRoom(){
  peer=new Peer(code);
  peer.on('open',()=>{
    document.getElementById('roomLine').innerHTML=tr('waiting')+' <span class="room-code">'+code+'</span>';
-   game=newGame();
+   game=newGame(tr('first'));
    setStatus(tr('waiting')+code);
+   showGamePanels();
    render();
  });
  peer.on('connection',(c)=>{
-   conn=c;
-   setupConn();
+   conn=c; setupConn();
    conn.on('open',()=>{
-     document.getElementById('lobbyPanel').style.display='none';
+     document.getElementById('lobbyPanel').classList.add('hidden');
      setStatus(tr('connected'));
      sync();
    });
@@ -153,14 +197,12 @@ function joinRoom(){
 function setupConn(){
  conn.on('data',(msg)=>{
    if(isHost){
-     if(msg.type==='action'){
-       handleAction(1,msg.action);
-       sync();
-     }
+     if(msg.type==='action'){handleAction(1,msg.action);sync();}
    }else{
      if(msg.type==='state'){
        game=msg.game;
-       document.getElementById('lobbyPanel').style.display='none';
+       document.getElementById('lobbyPanel').classList.add('hidden');
+       showGamePanels();
        render();
      }
    }
@@ -170,34 +212,20 @@ function setupConn(){
 function publicStateFor(index){
  return {
    deckCount:game.deck.length,
-   players:game.players.map((p,i)=>({
-     hand:i===index?p.hand:[],
-     handCount:p.hand.length,
-     pileCount:p.pile.length
-   })),
-   currentPlayer:game.currentPlayer,
-   lastPlay:game.lastPlay,
-   lastWinner:game.lastWinner,
-   message:game.message,
-   gameOver:game.gameOver
+   players:game.players.map((p,i)=>({hand:i===index?p.hand:[],handCount:p.hand.length,pileCount:p.pile.length})),
+   currentPlayer:game.currentPlayer,lastPlay:game.lastPlay,lastWinner:game.lastWinner,message:game.message,gameOver:game.gameOver
  };
 }
-function localViewForHost(){
- return publicStateFor(0);
-}
-function sync(){
- if(!game)return;
- if(isHost&&conn&&conn.open)conn.send({type:'state',game:publicStateFor(1)});
- render();
-}
+function localViewForHost(){return publicStateFor(0)}
+function sync(){if(!game)return;if(mode==='online'&&isHost&&conn&&conn.open)conn.send({type:'state',game:publicStateFor(1)});render()}
 function createDeck(){
  const d=[];for(const r of NORMAL_RANKS)for(const s of SUITS)d.push({rank:r,suit:s,id:r+s+Math.random()});
  d.push({rank:'小王',suit:'',id:'小王'+Math.random()});d.push({rank:'大王',suit:'',id:'大王'+Math.random()});
  return shuffle(d)
 }
 function shuffle(d){for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]]}return d}
-function newGame(){
- const g={deck:createDeck(),players:[{hand:[],pile:[]},{hand:[],pile:[]}],currentPlayer:0,lastPlay:null,lastWinner:null,message:tr('first'),gameOver:false};
+function newGame(firstMsg){
+ const g={deck:createDeck(),players:[{hand:[],pile:[]},{hand:[],pile:[]}],currentPlayer:0,lastPlay:null,lastWinner:null,message:firstMsg,gameOver:false};
  drawToTwo(g.players[0],g); drawToTwo(g.players[1],g); return g;
 }
 function drawToTwo(p,g){while(p.hand.length<2&&g.deck.length>0)p.hand.push(g.deck.shift())}
@@ -216,13 +244,22 @@ function executePlay(i,cardIds){
  p.hand=p.hand.filter(c=>!cardIds.includes(c.id)); p.pile.push(...cards);
  game.lastPlay={playerIndex:i,cards}; game.lastWinner=i;
  drawToTwo(p,game); checkEnd(i);
- if(!game.gameOver){game.currentPlayer=1-i;game.message=(i===playerIndex?tr('you'):(lang==='zh'?'对方':'Opponent'))+' '+(lang==='zh'?'出了':'played')+' '+cards.map(cardText).join(' ')+'（'+typeLabel(type(cards))+'）。'}
+ if(!game.gameOver){
+   game.currentPlayer=1-i;
+   const key=mode==='solo'?(i===0?'youPlayed':'aiPlayed'):(i===playerIndex?'youPlayed':'opPlayed');
+   game.message=tr(key)+' '+cards.map(cardText).join(' ')+'（'+typeLabel(type(cards))+'）。';
+ }
  return null;
 }
 function executePass(i){
  if(!game.lastPlay)return tr('emptyPass');
  const w=game.lastWinner; game.lastPlay=null; game.currentPlayer=w;
- game.message=(lang==='zh'?`玩家 ${i+1} Pass。清桌，玩家 ${w+1} 继续先手。`:`Player ${i+1} passed. Player ${w+1} continues first.`);
+ if(mode==='solo'){
+   const passer=i===0?tr('you'):tr('computer'); const winner=w===0?tr('you'):tr('computer');
+   game.message=lang==='zh'?passer+' Pass。清桌，'+winner+'继续先手。':passer+' passed. '+winner+' continues first.';
+ }else{
+   game.message=lang==='zh'?`玩家 ${i+1} Pass。清桌，玩家 ${w+1} 继续先手。`:`Player ${i+1} passed. Player ${w+1} continues first.`;
+ }
  return null;
 }
 function checkEnd(i){
@@ -232,51 +269,53 @@ function checkEnd(i){
  game.gameOver=true;
  const mine=game.players[playerIndex].pile.length, op=game.players[1-playerIndex].pile.length;
  if(mine>op)game.message=tr('gameEnd')+'：'+tr('youWin');
- else if(op>mine)game.message=tr('gameEnd')+'：'+tr('opWin');
+ else if(op>mine)game.message=tr('gameEnd')+'：'+(mode==='solo'?tr('aiWin'):tr('opWin'));
  else game.message=tr('gameEnd')+'：'+tr('tie');
 }
 function handleAction(index,action){
  if(!game||game.gameOver)return;
+ if(action.type==='restart'){game=newGame(mode==='solo'?tr('soloFirst'):tr('first'));return}
  if(game.currentPlayer!==index){game.message=tr('notTurn');return}
  let err=null;
  if(action.type==='play')err=executePlay(index,action.cardIds||[]);
  if(action.type==='pass')err=executePass(index);
- if(action.type==='restart'){game=newGame();return}
  if(err)game.message=err;
 }
 function submitAction(action){
  if(!game)return;
- if(isHost){
-   handleAction(0,action);
-   sync();
- }else{
-   send({type:'action',action});
+ if(mode==='solo'||isHost){handleAction(0,action);sync();if(mode==='solo')aiLater();}
+ else send({type:'action',action});
+ selectedIds=[]; render();
+}
+function allPlays(hand){const ps=hand.map(c=>[c]);if(hand.length>=2)ps.push([hand[0],hand[1]]);return ps.filter(p=>type(p))}
+function chooseAi(){
+ const legal=allPlays(game.players[1].hand).filter(p=>canBeat(game.lastPlay,p));
+ if(!legal.length)return null;
+ if(game.lastPlay){
+   const t=type(game.lastPlay.cards);
+   if(t==='kingbomb')return null;
+   return legal.filter(p=>type(p)===t||type(p)==='kingbomb').sort((a,b)=>value(a)-value(b))[0]||null;
  }
- selectedIds=[];
- render();
+ if(game.deck.length===0){const two=legal.filter(p=>p.length===2).sort((a,b)=>value(a)-value(b))[0];if(two)return two}
+ const singles=legal.filter(p=>p.length===1).sort((a,b)=>value(a)-value(b));
+ return singles[0]||legal.sort((a,b)=>value(a)-value(b))[0];
+}
+function aiLater(){
+ if(mode!=='solo'||!game||game.gameOver||game.currentPlayer!==1)return;
+ setTimeout(()=>{if(!game||game.gameOver||game.currentPlayer!==1)return;const p=chooseAi();if(p)executePlay(1,p.map(c=>c.id));else executePass(1);render();if(!game.gameOver&&game.currentPlayer===1)aiLater()},500);
 }
 function currentView(){return isHost&&game?localViewForHost():game}
 function me(){const v=currentView();return v?.players?.[playerIndex]}
 function op(){const v=currentView();return v?.players?.[1-playerIndex]}
-function toggle(id){
- const v=currentView();
- if(!v||v.gameOver||v.currentPlayer!==playerIndex)return;
- if(selectedIds.includes(id))selectedIds=selectedIds.filter(x=>x!==id);else{if(selectedIds.length>=2)return;selectedIds.push(id)}
- render();
-}
+function toggle(id){const v=currentView();if(!v||v.gameOver||v.currentPlayer!==playerIndex)return;if(selectedIds.includes(id))selectedIds=selectedIds.filter(x=>x!==id);else{if(selectedIds.length>=2)return;selectedIds.push(id)}render()}
 function txt(c){return c.rank+(c.suit||'')}function jokerSrc(c){if(c.rank==='小王')return'./joker-small.svg';if(c.rank==='大王')return'./joker-big.svg';return null}function red(c){return c.suit==='♥'||c.suit==='♦'}
 function cardDiv(c,mode){const d=document.createElement('div');d.className='card';if(mode==='back'){d.classList.add('back');d.textContent='🂠';return d}const js=jokerSrc(c);if(js){const img=document.createElement('img');img.src=js;img.alt=c.rank;img.className='joker-img';d.appendChild(img)}else{if(red(c))d.classList.add('red');d.textContent=txt(c)}if(mode==='mine'){if(selectedIds.includes(c.id))d.classList.add('selected');d.onclick=()=>toggle(c.id)}return d}
 function renderCards(id,cards,mode){const el=document.getElementById(id);el.innerHTML='';cards.forEach(c=>el.appendChild(cardDiv(c,mode)))}
 function renderBacks(id,count){const el=document.getElementById(id);el.innerHTML='';for(let i=0;i<count;i++)el.appendChild(cardDiv({},'back'))}
-function renderTable(){
- const v=currentView(); const el=document.getElementById('tableCards'); el.innerHTML='';
- const cards=v?.lastPlay?.cards||[]; cards.forEach(c=>{const d=cardDiv(c,'table');d.classList.add('table-card');el.appendChild(d)});
- document.getElementById('tableInfo').textContent=v?.lastPlay?tr('lastPlay')+'：'+(v.lastPlay.playerIndex===playerIndex?tr('you'):(lang==='zh'?'对方':'Opponent'))+'，'+cards.map(txt).join(' '):tr('emptyTable');
-}
+function renderTable(){const v=currentView();const el=document.getElementById('tableCards');el.innerHTML='';const cards=v?.lastPlay?.cards||[];cards.forEach(c=>{const d=cardDiv(c,'table');d.classList.add('table-card');el.appendChild(d)});document.getElementById('tableInfo').textContent=v?.lastPlay?tr('lastPlay')+'：'+(v.lastPlay.playerIndex===playerIndex?tr('you'):(mode==='solo'?tr('computer'):tr('opponent')))+'，'+cards.map(txt).join(' '):tr('emptyTable')}
 function render(){
- const v=currentView();
- if(!v)return;
- document.getElementById('status').innerHTML=v.gameOver?'<span class="winner">'+v.message+'</span>':v.message+'<br>'+tr('current')+'：'+(v.currentPlayer===playerIndex?tr('you'):(lang==='zh'?'对方':'Opponent'));
+ const v=currentView(); if(!v)return;
+ document.getElementById('status').innerHTML=v.gameOver?'<span class="winner">'+v.message+'</span>':v.message+'<br>'+tr('current')+'：'+(v.currentPlayer===playerIndex?tr('you'):(mode==='solo'?tr('computer'):tr('opponent')));
  document.getElementById('myScore').textContent=me()?.pileCount||0;
  document.getElementById('opScore').textContent=op()?.pileCount||0;
  document.getElementById('deckInfo').textContent=v.deckCount??(game?.deck?.length||0);
@@ -285,13 +324,16 @@ function render(){
  renderTable(); renderCards('myCards',me()?.hand||[],'mine'); renderBacks('opCards',op()?.handCount||0);
  const turn=v.currentPlayer===playerIndex&&!v.gameOver; document.getElementById('playBtn').disabled=!turn; document.getElementById('passBtn').disabled=!turn;
 }
+document.getElementById('soloBtn').onclick=startSolo;
+document.getElementById('onlineBtn').onclick=chooseOnline;
+document.getElementById('backBtn').onclick=showMode;
 document.getElementById('hostBtn').onclick=hostRoom;
 document.getElementById('joinBtn').onclick=joinRoom;
 document.getElementById('playBtn').onclick=()=>submitAction({type:'play',cardIds:selectedIds});
 document.getElementById('passBtn').onclick=()=>submitAction({type:'pass'});
 document.getElementById('resetBtn').onclick=()=>submitAction({type:'restart'});
 document.getElementById('langBtn').onclick=()=>{lang=lang==='zh'?'en':'zh';applyLang()};
-applyLang();setStatus(tr('ready'));
+applyLang();showMode();
 })();
 </script>
 </body>
