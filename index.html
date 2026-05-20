@@ -25,6 +25,37 @@
   code{background:#020617;padding:2px 5px;border-radius:5px}.restart-row{min-height:auto;margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,.18)}
   .hidden{display:none}.room-code{font-size:26px;font-weight:900;letter-spacing:4px;color:#22c55e}
   .badge{display:inline-block;background:#1d4ed8;color:#bfdbfe;padding:2px 8px;border-radius:6px;font-size:12px;margin-left:6px;font-weight:700}
+
+  /* 可折叠规则 */
+  .rule-toggle{background:none;border:1px solid #334155;color:#94a3b8;font-size:13px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .rule-toggle:hover{border-color:#64748b;color:#cbd5e1}
+  .rule-body{overflow:hidden;max-height:0;transition:max-height .3s ease,opacity .3s ease;opacity:0}
+  .rule-body.open{max-height:400px;opacity:1}
+
+  /* 对手区紧凑 */
+  #player1Panel{padding:8px 14px}
+  #player1Panel h2{font-size:14px;color:#64748b;margin:0 0 6px;font-weight:600}
+  #player1Panel .row{min-height:52px;gap:6px}
+  #player1Panel .card{width:46px;height:64px;font-size:16px}
+  #player1Panel .joker-img{width:40px;height:56px}
+
+  /* 胜负 Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .25s}
+  .modal-overlay.show{opacity:1;pointer-events:all}
+  .modal{background:#1e293b;border:1px solid #334155;border-radius:20px;padding:32px 28px;text-align:center;max-width:320px;width:90%;transform:scale(.85);transition:transform .25s}
+  .modal-overlay.show .modal{transform:scale(1)}
+  .modal-icon{font-size:52px;margin-bottom:8px}
+  .modal-title{font-size:26px;font-weight:900;margin-bottom:6px}
+  .modal-title.win{color:#22c55e}.modal-title.lose{color:#ef4444}.modal-title.tie{color:#facc15}
+  .modal-sub{font-size:14px;color:#94a3b8;margin-bottom:20px}
+  .modal-btns{display:flex;gap:10px;justify-content:center}
+
+  /* 胜利彩屑动画 */
+  @keyframes confetti-fall{
+    0%{transform:translateY(-10px) rotate(0deg);opacity:1}
+    100%{transform:translateY(100vh) rotate(720deg);opacity:0}
+  }
+  .confetti{position:fixed;top:0;width:8px;height:8px;border-radius:2px;pointer-events:none;z-index:99;animation:confetti-fall linear forwards}
 </style>
 </head>
 <body>
@@ -73,7 +104,10 @@
         <div class="scorebox"><span id="oppPileLabel" data-i18n="aiPile">电脑出牌堆</span>：<b id="aiScore">0</b></div>
         <div class="scorebox"><span data-i18n="drawPile">起牌牌堆</span>：<b id="deckInfo">0</b></div>
       </div>
-      <div class="hint" id="ruleHint"></div>
+      <div style="margin-top:10px">
+        <button class="rule-toggle" id="ruleToggle" onclick="toggleRule()">📖 <span id="ruleToggleLabel">游戏规则</span> <span id="ruleArrow">▾</span></button>
+        <div class="rule-body" id="ruleBody"><div class="hint" id="ruleHint" style="margin-top:8px"></div></div>
+      </div>
     </div>
 
     <div class="panel" id="player1Panel"><h2 id="opponentLabel" data-i18n="computer">电脑</h2><div class="row" id="player1Cards"></div></div>
@@ -87,9 +121,22 @@
       </div>
       <p class="small" data-i18n="instruction">点击你的 1 或 2 张牌，然后点「出牌」。</p>
       <div class="row restart-row">
-        <button id="resetBtn" class="danger" data-i18n="restart">重新开始</button>
+        <button id="resetBtn" class="danger hidden" data-i18n="restart">重新开始</button>
         <button id="exitBtn" class="secondary" data-i18n="exit">退出</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 胜负 Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-icon" id="modalIcon"></div>
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-sub" id="modalSub"></div>
+    <div class="modal-btns">
+      <button id="modalRestartBtn">再来一局</button>
+      <button class="secondary" id="modalExitBtn">退出</button>
     </div>
   </div>
 </div>
@@ -107,6 +154,9 @@ const I18N={
   rule:'计分规则：每次出的牌进入自己的出牌堆。起牌牌堆空后，不再补牌。先出完手牌的一方，把对方剩余手牌也收入自己的出牌堆。最后比较出牌堆数量，多者获胜。<br>牌型：单张、对子、两张顺子、王炸。顺子只允许 <code>34</code> 到 <code>KA</code>。小王+大王为王炸，可压任意牌型。',
   first:'你先手。', oppFirst:'对手先手。', current:'当前回合', emptyTable:'空桌。当前玩家可以任意合法出牌。', lastPlay:'上一手', invalid:'非法牌型。只能出单张、对子、34 到 KA 的两张顺子，或王炸。', select:'请先点选要出的牌。', cannotBeat:'压不上。请出更大的同类型牌、王炸，或者 Pass。', emptyPass:'空桌不能 Pass，必须出牌。', pass:'Pass。清桌，', continueFirst:'继续先手。',
   gameEnd:'游戏结束', humanWin:'你获胜！', aiWin:'电脑获胜。', oppWin:'对手获胜。', tie:'平局', yourPile2:'你的出牌堆', aiPile2:'电脑', oppPile2:'对手', cards:'张',
+  modalWinIcon:'🎉', modalLoseIcon:'😞', modalTieIcon:'🤝',
+  modalWinTitle:'你赢了！', modalLoseTitle:'你输了', modalTieTitle:'平局',
+  ruleToggleLabel:'游戏规则', modalRestart:'再来一局', modalExit:'退出',
   roomCreated:'房间已创建：', roomReady:'对方已加入，开始对局！', joinFailed:'加入失败：', waiting:'等待对方加入...', oppLeft:'对手已离开。', oppTurn:'轮到对方出牌...', yourTurn:'轮到你出牌',
   notYourTurn:'还没轮到你。', cardNotInHand:'手牌不一致，请刷新。', actionFailed:'操作失败：',
   types:{single:'单张',pair:'对子',straight:'顺子',kingbomb:'王炸'}
@@ -121,6 +171,9 @@ const I18N={
   rule:'Scoring: every played card goes into your own pile. When the draw pile is empty, no more cards are drawn. The first player to empty their hand takes the opponent\u2019s remaining hand into their pile. Higher pile count wins.<br>Hands: single, pair, two-card straight, Joker Bomb. Straights only run from <code>34</code> to <code>KA</code>. Small Joker + Big Joker is Joker Bomb and beats any hand type.',
   first:'You go first.', oppFirst:'Opponent goes first.', current:'Current turn', emptyTable:'Empty table. Current player may play any legal hand.', lastPlay:'Last play', invalid:'Invalid hand. Play a single, pair, 34-to-KA straight, or Joker Bomb.', select:'Select cards first.', cannotBeat:'Cannot beat it. Play a higher same-type hand, Joker Bomb, or Pass.', emptyPass:'Cannot Pass on an empty table. You must play.', pass:'passed. Table reset. ', continueFirst:' continues first.',
   gameEnd:'Game over', humanWin:'You win!', aiWin:'Computer wins.', oppWin:'Opponent wins.', tie:'Tie', yourPile2:'Your pile', aiPile2:'computer', oppPile2:'opponent', cards:'cards',
+  modalWinIcon:'🎉', modalLoseIcon:'😞', modalTieIcon:'🤝',
+  modalWinTitle:'You Win!', modalLoseTitle:'You Lose', modalTieTitle:'Tie Game',
+  ruleToggleLabel:'Rules', modalRestart:'Play Again', modalExit:'Exit',
   roomCreated:'Room created: ', roomReady:'Opponent joined. Starting game!', joinFailed:'Join failed: ', waiting:'Waiting for opponent...', oppLeft:'Opponent left.', oppTurn:'Opponent\'s turn...', yourTurn:'Your turn',
   notYourTurn:'Not your turn.', cardNotInHand:'Hand out of sync, please refresh.', actionFailed:'Action failed: ',
   types:{single:'single',pair:'pair',straight:'straight',kingbomb:'Joker Bomb'}
@@ -158,7 +211,9 @@ function applyLang(){
   document.getElementById('ruleHint').innerHTML=tr('rule');
   document.getElementById('otherGamesLabel').textContent=tr('otherGames');
   document.getElementById('roomInput').placeholder=tr('roomCodePlaceholder');
-  // 联机模式下对手标签改成"对手"
+  document.getElementById('ruleToggleLabel').textContent=tr('ruleToggleLabel');
+  document.getElementById('modalRestartBtn').textContent=tr('modalRestart');
+  document.getElementById('modalExitBtn').textContent=tr('modalExit');
   if(mode==='online'){
     document.getElementById('opponentLabel').textContent=tr('opponent');
     document.getElementById('oppPileLabel').textContent=tr('oppPile');
@@ -450,8 +505,7 @@ function render(){
     if(!soloState) return;
     const ht = soloState.currentPlayer === HUMAN && !soloState.gameOver;
     document.getElementById('status').innerHTML = soloState.gameOver
-      ? '<span class="winner">'+soloState.message+'</span>'
-      : (soloState.message||'')+'<br>'+tr('current')+'：'+soloPlayerName(soloState.currentPlayer);
+      ? '' : (soloState.message||'')+'<br>'+tr('current')+'：'+soloPlayerName(soloState.currentPlayer);
     document.getElementById('humanScore').textContent = soloState.players[HUMAN].pile.length;
     document.getElementById('aiScore').textContent = soloState.players[AI].pile.length;
     document.getElementById('deckInfo').textContent = soloState.deck.length;
@@ -459,7 +513,15 @@ function render(){
     document.getElementById('player1Panel').classList.toggle('active', soloState.currentPlayer===AI && !soloState.gameOver);
     document.getElementById('playBtn').disabled = !ht;
     document.getElementById('passBtn').disabled = !ht;
-    document.getElementById('resetBtn').classList.remove('hidden');
+    if(soloState.gameOver){
+      const hs=soloState.players[HUMAN].pile.length, as=soloState.players[AI].pile.length;
+      const won=soloState.winner===HUMAN, tied=soloState.winner===-1||soloState.winner===null;
+      showModal(
+        tied?'tie': won?'win':'lose',
+        tied?`${hs} vs ${as}`: won?`${tr('yourPile2')} ${hs} ${tr('cards')}`:`${tr('aiPile2')} ${as} ${tr('cards')}`,
+        true
+      );
+    }
   } else if(mode==='online'){
     if(!onlineView){
       document.getElementById('status').textContent = tr('waiting');
@@ -468,18 +530,8 @@ function render(){
       return;
     }
     const myTurn = onlineView.currentPlayer === onlineYourIndex && !onlineView.gameOver;
-    let statusMsg;
-    if(onlineView.gameOver){
-      let winText;
-      if(onlineView.winner === -1) winText = tr('tie');
-      else if(onlineView.winner === onlineYourIndex) winText = tr('humanWin');
-      else winText = tr('oppWin');
-      const ys = onlineView.you.pile;
-      const os = onlineView.opponent.pile;
-      statusMsg = '<span class="winner">'+tr('gameEnd')+'：'+winText+' '+tr('yourPile2')+' '+ys+' '+tr('cards')+'，'+tr('oppPile2')+' '+os+' '+tr('cards')+'。</span>';
-    } else {
-      statusMsg = (myTurn ? tr('yourTurn') : tr('oppTurn'))+'<br>'+tr('current')+'：'+(myTurn?tr('you'):tr('opponent'));
-    }
+    const statusMsg = onlineView.gameOver ? '' :
+      (myTurn ? tr('yourTurn') : tr('oppTurn'))+'<br>'+tr('current')+'：'+(myTurn?tr('you'):tr('opponent'));
     document.getElementById('status').innerHTML = statusMsg;
     document.getElementById('humanScore').textContent = onlineView.you.pile;
     document.getElementById('aiScore').textContent = onlineView.opponent.pile;
@@ -488,17 +540,68 @@ function render(){
     document.getElementById('player1Panel').classList.toggle('active', !myTurn && !onlineView.gameOver);
     document.getElementById('playBtn').disabled = !myTurn;
     document.getElementById('passBtn').disabled = !myTurn;
-    // 联机模式：重新开始按钮只在游戏结束后可用
-    document.getElementById('resetBtn').classList.toggle('hidden', !onlineView.gameOver);
+    if(onlineView.gameOver){
+      const ys=onlineView.you.pile, os=onlineView.opponent.pile;
+      const won=onlineView.winner===onlineYourIndex, tied=onlineView.winner===-1;
+      showModal(
+        tied?'tie': won?'win':'lose',
+        `${tr('yourPile2')} ${ys} ${tr('cards')} · ${tr('oppPile2')} ${os} ${tr('cards')}`,
+        true
+      );
+    }
   }
 
   renderTable();
   renderHands();
 }
 
+// ── 折叠规则 ──
+function toggleRule(){
+  const body = document.getElementById('ruleBody');
+  const arrow = document.getElementById('ruleArrow');
+  const open = body.classList.toggle('open');
+  arrow.textContent = open ? '▴' : '▾';
+}
+window.toggleRule = toggleRule;
+
+// ── Modal ──
+let _modalShown = false;
+function showModal(type, sub, canRestart){
+  if(_modalShown) return;
+  _modalShown = true;
+  document.getElementById('modalIcon').textContent = tr('modal'+type.charAt(0).toUpperCase()+type.slice(1)+'Icon');
+  const titleEl = document.getElementById('modalTitle');
+  titleEl.textContent = tr('modal'+type.charAt(0).toUpperCase()+type.slice(1)+'Title');
+  titleEl.className = 'modal-title '+type;
+  document.getElementById('modalSub').textContent = sub;
+  document.getElementById('modalRestartBtn').classList.toggle('hidden', !canRestart);
+  document.getElementById('modalOverlay').classList.add('show');
+  if(type==='win') launchConfetti();
+}
+
+function hideModal(){
+  _modalShown = false;
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// ── 彩屑 ──
+function launchConfetti(){
+  const colors=['#22c55e','#3b82f6','#f59e0b','#ef4444','#a855f7','#06b6d4'];
+  for(let i=0;i<60;i++){
+    const el=document.createElement('div');
+    el.className='confetti';
+    el.style.cssText=`left:${Math.random()*100}vw;background:${colors[i%colors.length]};`+
+      `animation-duration:${1.2+Math.random()*1.4}s;animation-delay:${Math.random()*0.5}s;`+
+      `width:${6+Math.random()*6}px;height:${6+Math.random()*6}px`;
+    document.body.appendChild(el);
+    el.addEventListener('animationend',()=>el.remove());
+  }
+}
+
 // ===== 模式切换 =====
 function showMode(){
   mode = null;
+  hideModal();
   document.getElementById('modePanel').classList.remove('hidden');
   document.getElementById('lobbyPanel').classList.add('hidden');
   document.getElementById('gameArea').classList.add('hidden');
@@ -537,6 +640,7 @@ function exitGame(){
 }
 
 function restartGame(){
+  hideModal();
   if(mode==='solo'){
     soloInit();
   } else if(mode==='online'){
@@ -570,6 +674,8 @@ document.getElementById('passBtn').addEventListener('click', ()=>{
 });
 document.getElementById('resetBtn').addEventListener('click', restartGame);
 document.getElementById('exitBtn').addEventListener('click', exitGame);
+document.getElementById('modalRestartBtn').addEventListener('click', restartGame);
+document.getElementById('modalExitBtn').addEventListener('click', ()=>{ hideModal(); exitGame(); });
 document.getElementById('langBtn').addEventListener('click', ()=>{
   lang = lang==='zh'?'en':'zh';
   applyLang();
