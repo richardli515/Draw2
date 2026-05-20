@@ -26,8 +26,6 @@ button.lang{font-size:13px;padding:8px 10px;background:#334155;opacity:.8}
 .room-code{font-size:26px;font-weight:900;letter-spacing:4px;color:#22c55e}
 a.back{color:#94a3b8;font-size:13px;text-decoration:none}
 a.back:hover{color:#e5e7eb}
-.winner-text{font-size:22px;font-weight:900;color:#22c55e}
-.loser-text{font-size:22px;font-weight:900;color:#ef4444}
 .hand{display:flex;gap:8px;flex-wrap:wrap;min-height:96px;align-items:center;padding:4px 0}
 .card{width:56px;height:80px;border-radius:10px;background:#f8fafc;color:#111827;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;cursor:pointer;user-select:none;border:3px solid transparent;box-shadow:0 4px 8px rgba(0,0,0,.3);flex-shrink:0;transition:transform .1s,border-color .1s}
 .card.red{color:#dc2626}
@@ -42,6 +40,33 @@ a.back:hover{color:#e5e7eb}
 .pile-label{font-size:11px;color:#64748b;letter-spacing:.5px}
 .deck-badge{background:#020617;border:1px solid #334155;border-radius:6px;padding:2px 8px;font-size:12px;color:#94a3b8;display:inline-block;margin-left:8px}
 .pass-flag{display:inline-block;background:#374151;border-radius:6px;padding:2px 8px;font-size:12px;color:#fbbf24;margin-left:8px}
+
+/* 可折叠规则 */
+.rule-toggle{background:none;border:1px solid #334155;color:#94a3b8;font-size:13px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.rule-toggle:hover{border-color:#64748b;color:#cbd5e1}
+.rule-body{overflow:hidden;max-height:0;transition:max-height .3s ease,opacity .3s ease;opacity:0}
+.rule-body.open{max-height:500px;opacity:1}
+
+/* 对手区紧凑 */
+#oppPanel{padding:8px 14px}
+#oppPanel h2{font-size:14px;color:#64748b;margin:0 0 6px;font-weight:600}
+#oppPanel .hand{min-height:52px;gap:6px}
+#oppPanel .card{width:44px;height:62px;font-size:15px}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .25s}
+.modal-overlay.show{opacity:1;pointer-events:all}
+.modal{background:#1e293b;border:1px solid #334155;border-radius:20px;padding:32px 28px;text-align:center;max-width:320px;width:90%;transform:scale(.85);transition:transform .25s}
+.modal-overlay.show .modal{transform:scale(1)}
+.modal-icon{font-size:52px;margin-bottom:8px}
+.modal-title{font-size:26px;font-weight:900;margin-bottom:6px}
+.modal-title.win{color:#22c55e}.modal-title.lose{color:#ef4444}.modal-title.tie{color:#facc15}
+.modal-sub{font-size:14px;color:#94a3b8;margin-bottom:20px}
+.modal-btns{display:flex;gap:10px;justify-content:center}
+
+/* 彩屑 */
+@keyframes confetti-fall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+.confetti{position:fixed;top:0;width:8px;height:8px;border-radius:2px;pointer-events:none;z-index:99;animation:confetti-fall linear forwards}
 </style>
 </head>
 <body>
@@ -59,8 +84,11 @@ a.back:hover{color:#e5e7eb}
   <div class="panel" id="lobbyPanel">
     <h2 id="lobbyTitle">联机大厅</h2>
     <div class="hint" id="lobbyHint" style="margin-bottom:10px">创建房间后把房间码发给朋友，对方输入后即可开局。</div>
-    <div class="panel" style="background:#0f172a;margin-bottom:12px;padding:10px 14px">
-      <p class="small" id="ruleText" style="margin:0;line-height:1.9"></p>
+    <div style="margin-bottom:12px">
+      <button class="rule-toggle" id="ruleToggle" onclick="toggleRule()">📖 <span id="ruleToggleLabel">游戏规则</span> <span id="ruleArrow">▾</span></button>
+      <div class="rule-body" id="ruleBody">
+        <p class="small" id="ruleText" style="margin:8px 0 0;line-height:1.9"></p>
+      </div>
     </div>
     <div class="row" style="min-height:auto">
       <button id="hostBtn">创建房间</button>
@@ -111,17 +139,22 @@ a.back:hover{color:#e5e7eb}
     <div class="panel">
       <div class="row" style="min-height:auto">
         <button id="passBtn" class="secondary" disabled>Pass</button>
-        <button id="exitBtn" class="secondary" data-i18n="exit">退出</button>
+        <button id="exitBtn" class="secondary">退出</button>
       </div>
       <p class="small" id="instruction" style="margin:6px 0 0">选手牌 → 点桌面堆出牌。没牌可出时点 Pass。</p>
     </div>
+  </div>
+</div>
 
-    <div class="panel hidden" id="resultPanel">
-      <div id="resultMsg" style="font-size:22px;font-weight:900;margin-bottom:12px"></div>
-      <div class="row" style="min-height:auto">
-        <button id="restartBtn">再来一局</button>
-        <button id="exitBtn2" class="secondary">退出</button>
-      </div>
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-icon" id="modalIcon"></div>
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-sub" id="modalSub"></div>
+    <div class="modal-btns">
+      <button id="modalRestartBtn">再来一局</button>
+      <button class="secondary" id="modalExitBtn">退出</button>
     </div>
   </div>
 </div>
@@ -160,6 +193,10 @@ const I18N = {
     won: '🎉 你赢了！',
     lost: '💀 对手赢了。',
     oppLeft: '对手已离开。',
+    ruleToggleLabel: '游戏规则',
+    modalWinIcon:'🎉', modalLoseIcon:'😞', modalTieIcon:'🤝',
+    modalWinTitle:'你赢了！', modalLoseTitle:'你输了', modalTieTitle:'平局',
+    modalRestart:'再来一局', modalExit:'退出',
   },
   en: {
     back: '← Draw2',
@@ -192,6 +229,10 @@ const I18N = {
     won: '🎉 You win!',
     lost: '💀 Opponent wins.',
     oppLeft: 'Opponent left.',
+    ruleToggleLabel: 'Rules',
+    modalWinIcon:'🎉', modalLoseIcon:'😞', modalTieIcon:'🤝',
+    modalWinTitle:'You Win!', modalLoseTitle:'You Lose', modalTieTitle:'Tie Game',
+    modalRestart:'Play Again', modalExit:'Exit',
   }
 };
 
@@ -214,12 +255,12 @@ function applyLang(){
   document.getElementById('tableHint').textContent = t('tableHint');
   document.getElementById('youLabel').textContent = t('youLabel');
   document.getElementById('exitBtn').textContent = t('exit');
-  document.getElementById('exitBtn2').textContent = t('exit');
-  document.getElementById('restartBtn').textContent = t('restart');
+  document.getElementById('ruleToggleLabel').textContent = t('ruleToggleLabel');
+  document.getElementById('modalRestartBtn').textContent = t('modalRestart');
+  document.getElementById('modalExitBtn').textContent = t('modalExit');
   document.getElementById('instruction').textContent = t('instruction');
   document.getElementById('pileLabel0').textContent = t('pileLabel')[0];
   document.getElementById('pileLabel1').textContent = t('pileLabel')[1];
-  // 重新渲染当前 view（更新空槽文字等）
   if(currentView) render(currentView);
 }
 
@@ -343,9 +384,9 @@ function getSocket(){
   socket.on('speed:gameStart',data=>{
     myIndex=data.yourIndex;
     selectedCardId=null;
+    hideModal();
     document.getElementById('lobbyPanel').classList.add('hidden');
     document.getElementById('gameArea').classList.remove('hidden');
-    document.getElementById('resultPanel').classList.add('hidden');
     document.getElementById('passBtn').disabled=false;
     render(data.view);
   });
@@ -362,11 +403,9 @@ function getSocket(){
 
   socket.on('speed:gameOver',data=>{
     const won=data.winner===myIndex;
-    const msg=document.getElementById('resultMsg');
-    msg.className=won?'winner-text':'loser-text';
-    msg.textContent=won?t('won'):t('lost');
-    document.getElementById('resultPanel').classList.remove('hidden');
+    const tied=data.winner===-1;
     document.getElementById('passBtn').disabled=true;
+    showModal(tied?'tie':won?'win':'lose', '', true);
   });
 
   socket.on('speed:opponentLeft',()=>{
@@ -377,23 +416,60 @@ function getSocket(){
   return socket;
 }
 
+// ── 折叠规则 ──
+function toggleRule(){
+  const body=document.getElementById('ruleBody');
+  const arrow=document.getElementById('ruleArrow');
+  const open=body.classList.toggle('open');
+  arrow.textContent=open?'▴':'▾';
+}
+window.toggleRule=toggleRule;
+
+// ── Modal ──
+let _modalShown=false;
+function showModal(type,sub,canRestart){
+  if(_modalShown) return;
+  _modalShown=true;
+  document.getElementById('modalIcon').textContent=t('modal'+type.charAt(0).toUpperCase()+type.slice(1)+'Icon');
+  const titleEl=document.getElementById('modalTitle');
+  titleEl.textContent=t('modal'+type.charAt(0).toUpperCase()+type.slice(1)+'Title');
+  titleEl.className='modal-title '+type;
+  document.getElementById('modalSub').textContent=sub||'';
+  document.getElementById('modalRestartBtn').classList.toggle('hidden',!canRestart);
+  document.getElementById('modalOverlay').classList.add('show');
+  if(type==='win') launchConfetti();
+}
+function hideModal(){
+  _modalShown=false;
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// ── 彩屑 ──
+function launchConfetti(){
+  const colors=['#22c55e','#7c3aed','#f59e0b','#ef4444','#06b6d4','#ec4899'];
+  for(let i=0;i<60;i++){
+    const el=document.createElement('div');
+    el.className='confetti';
+    el.style.cssText=`left:${Math.random()*100}vw;background:${colors[i%colors.length]};`+
+      `animation-duration:${1.2+Math.random()*1.4}s;animation-delay:${Math.random()*0.5}s;`+
+      `width:${6+Math.random()*6}px;height:${6+Math.random()*6}px`;
+    document.body.appendChild(el);
+    el.addEventListener('animationend',()=>el.remove());
+  }
+}
+
 function exitGame(){
   if(socket){socket.disconnect();socket=null;}
   location.href='/';
 }
 
-document.getElementById('langBtn').addEventListener('click',()=>{
-  lang=lang==='zh'?'en':'zh';
-  applyLang();
-});
+document.getElementById('langBtn').addEventListener('click',()=>{ lang=lang==='zh'?'en':'zh'; applyLang(); });
 document.getElementById('hostBtn').addEventListener('click',()=>getSocket().emit('speed:createRoom'));
-document.getElementById('joinBtn').addEventListener('click',()=>{
-  getSocket().emit('speed:joinRoom',document.getElementById('roomInput').value);
-});
+document.getElementById('joinBtn').addEventListener('click',()=>{ getSocket().emit('speed:joinRoom',document.getElementById('roomInput').value); });
 document.getElementById('passBtn').addEventListener('click',()=>socket&&socket.emit('speed:pass'));
 document.getElementById('exitBtn').addEventListener('click',exitGame);
-document.getElementById('exitBtn2').addEventListener('click',exitGame);
-document.getElementById('restartBtn').addEventListener('click',()=>socket&&socket.emit('speed:restart'));
+document.getElementById('modalRestartBtn').addEventListener('click',()=>{ hideModal(); socket&&socket.emit('speed:restart'); });
+document.getElementById('modalExitBtn').addEventListener('click',()=>{ hideModal(); exitGame(); });
 
 applyLang();
 })();
